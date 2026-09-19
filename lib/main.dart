@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'core/theme.dart';
 import 'screens/home_shell.dart';
 import 'state/app_state.dart';
+import 'state/habit_streaks_state.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,8 +16,11 @@ class PlanTomorrowApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => AppState()..load(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AppState()..load()),
+        ChangeNotifierProvider(create: (_) => HabitStreaksState()..load()),
+      ],
       child: MaterialApp(
         title: 'Plan Tomorrow',
         debugShowCheckedModeBanner: false,

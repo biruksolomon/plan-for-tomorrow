@@ -5,8 +5,10 @@ import '../core/theme.dart';
 import '../state/app_state.dart';
 import 'analytics_screen.dart';
 import 'history_screen.dart';
+import 'new_streak_screen.dart';
 import 'plan_tomorrow_screen.dart';
 import 'settings_screen.dart';
+import 'streaks_list_screen.dart';
 import 'today_screen.dart';
 
 class HomeShell extends StatefulWidget {
@@ -21,6 +23,7 @@ class _HomeShellState extends State<HomeShell> {
 
   static const _tabs = [
     TodayScreen(),
+    StreaksListScreen(),
     HistoryScreen(),
     AnalyticsScreen(),
     SettingsScreen(),
@@ -28,27 +31,9 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    final showPlanButton = _index == 0;
-
     return Scaffold(
       body: SafeArea(child: _tabs[_index]),
-      floatingActionButton: showPlanButton
-          ? FloatingActionButton.extended(
-              backgroundColor: AppColors.ink,
-              foregroundColor: AppColors.paper,
-              elevation: 0,
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const PlanTomorrowScreen()),
-              ),
-              icon: const Icon(Icons.edit_outlined, size: 19),
-              label: Text(
-                context.watch<AppState>().needsTomorrowPlan
-                    ? 'Plan tomorrow'
-                    : 'Edit tomorrow',
-                style: AppTheme.body(14, color: AppColors.paper, weight: FontWeight.w600),
-              ),
-            )
-          : null,
+      floatingActionButton: _fab(context),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
@@ -62,6 +47,11 @@ class _HomeShellState extends State<HomeShell> {
             icon: Icon(Icons.check_circle_outline, color: AppColors.muted),
             selectedIcon: Icon(Icons.check_circle, color: AppColors.accent),
             label: 'Today',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.local_fire_department_outlined, color: AppColors.muted),
+            selectedIcon: Icon(Icons.local_fire_department, color: AppColors.accent),
+            label: 'Streaks',
           ),
           NavigationDestination(
             icon: Icon(Icons.calendar_month_outlined, color: AppColors.muted),
@@ -81,5 +71,39 @@ class _HomeShellState extends State<HomeShell> {
         ],
       ),
     );
+  }
+
+  Widget? _fab(BuildContext context) {
+    if (_index == 0) {
+      return FloatingActionButton.extended(
+        backgroundColor: AppColors.ink,
+        foregroundColor: AppColors.paper,
+        elevation: 0,
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const PlanTomorrowScreen()),
+        ),
+        icon: const Icon(Icons.edit_outlined, size: 19),
+        label: Text(
+          context.watch<AppState>().needsTomorrowPlan ? 'Plan tomorrow' : 'Edit tomorrow',
+          style: AppTheme.body(14, color: AppColors.paper, weight: FontWeight.w600),
+        ),
+      );
+    }
+    if (_index == 1) {
+      return FloatingActionButton.extended(
+        backgroundColor: AppColors.ink,
+        foregroundColor: AppColors.paper,
+        elevation: 0,
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const NewStreakScreen()),
+        ),
+        icon: const Icon(Icons.add, size: 19),
+        label: Text(
+          'New streak',
+          style: AppTheme.body(14, color: AppColors.paper, weight: FontWeight.w600),
+        ),
+      );
+    }
+    return null;
   }
 }
