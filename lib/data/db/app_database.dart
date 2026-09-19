@@ -9,7 +9,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase();
 
   static const _dbName = 'plan_tomorrow.db';
-  static const _dbVersion = 1;
+  static const _dbVersion = 2;
 
   Database? _db;
 
@@ -51,11 +51,45 @@ class AppDatabase {
     // Every read is "give me one day" or "give me a date range", so day_key
     // carries all the query weight.
     await db.execute('CREATE INDEX idx_tasks_day_key ON tasks (day_key)');
+
+    await _createHabitStreakTables(db);
+  }
+
+  /// Named, calendar-bound streaks (e.g. "Morning workout, September 2026,
+  /// attempt 2") -- independent of the daily task list. One row per day of
+  /// the chosen month is inserted up front at creation time, so ticking is
+  /// always an update, never an insert.
+  static Future<void> _createHabitStreakTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE habit_streaks (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT    NOT NULL,
+        month      INTEGER NOT NULL,
+        year       INTEGER NOT NULL,
+        attempt    INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE habit_streak_days (
+        streak_id  INTEGER NOT NULL,
+        day_index  INTEGER NOT NULL,
+        is_done    INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (streak_id, day_index),
+        FOREIGN KEY (streak_id) REFERENCES habit_streaks (id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX idx_streak_days_streak_id ON habit_streak_days (streak_id)',
+    );
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Schema is at v1. Add migration steps here as the schema evolves,
-    // e.g. if (oldVersion < 2) { await db.execute('ALTER TABLE ...'); }
+    if (oldVersion < 2) {
+      await _createHabitStreakTables(db);
+    }
   }
 
   Future<void> close() async {
