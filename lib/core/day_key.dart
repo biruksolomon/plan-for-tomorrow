@@ -33,4 +33,9 @@ class DayKey {
 
   /// 1 = Monday ... 7 = Sunday, matching DateTime.weekday.
   static int weekday(String key) => parse(key).weekday;
+
+  /// Number of days in the given month (1-12). Day 0 of the next month is
+  /// the last day of this one -- the standard trick for this in Dart.
+  static int daysInMonth(int year, int month) =>
+      DateTime(year, month + 1, 0).day;
 }
