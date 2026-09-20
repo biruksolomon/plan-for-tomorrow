@@ -12,7 +12,8 @@ class HabitStreakRepository {
   /// Newest first -- matches how the list screen presents them.
   Future<List<HabitStreak>> getAll() async {
     final db = await _db.database;
-    final streakRows = await db.query('habit_streaks', orderBy: 'created_at DESC');
+    final streakRows =
+        await db.query('habit_streaks', orderBy: 'created_at DESC');
 
     final result = <HabitStreak>[];
     for (final row in streakRows) {
@@ -23,7 +24,8 @@ class HabitStreakRepository {
 
   Future<HabitStreak?> getById(int id) async {
     final db = await _db.database;
-    final rows = await db.query('habit_streaks', where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows = await db.query('habit_streaks',
+        where: 'id = ?', whereArgs: [id], limit: 1);
     if (rows.isEmpty) return null;
     return _hydrate(db, rows.first);
   }
@@ -32,81 +34,83 @@ class HabitStreakRepository {
     final id = row['id'] as int;
     final dayRows = await db.query(
       'habit_streak_days',
+      columns: ['day_key'],
       where: 'streak_id = ?',
       whereArgs: [id],
-      orderBy: 'day_index ASC',
     );
     return HabitStreak(
       id: id,
       name: row['name'] as String,
-      month: row['month'] as int,
-      year: row['year'] as int,
+      startDate: row['start_date'] as String,
+      targetLength: row['target_length'] as int,
       attempt: row['attempt'] as int,
       createdAt: row['created_at'] as int,
-      days: dayRows.map((r) => (r['is_done'] as int) == 1).toList(),
+      doneDates: {for (final r in dayRows) r['day_key'] as String},
     );
   }
 
-  /// Creates a streak and pre-inserts one row per day of the chosen month,
-  /// all unticked. Ticking is then always an UPDATE, never an INSERT --
-  /// simpler and avoids a whole class of "day row doesn't exist yet" bugs.
+  /// [startDate] must not be in the future -- there's no such thing as
+  /// starting a streak tomorrow. This is enforced here, not just left to
+  /// the date picker's bounds, so the rule holds regardless of caller.
   Future<HabitStreak> create({
     required String name,
-    required int month,
-    required int year,
+    required String startDate,
+    required int targetLength,
     required int attempt,
   }) async {
+    if (DayKey.daysBetween(DayKey.today(), startDate) > 0) {
+      throw StateError('Cannot start a streak in the future.');
+    }
+
     final db = await _db.database;
-    final total = DayKey.daysInMonth(year, month);
     final createdAt = DateTime.now().millisecondsSinceEpoch;
     final cleanName = name.trim();
 
-    late int id;
-    await db.transaction((txn) async {
-      id = await txn.insert('habit_streaks', {
-        'name': cleanName,
-        'month': month,
-        'year': year,
-        'attempt': attempt,
-        'created_at': createdAt,
-      });
-      for (var day = 1; day <= total; day++) {
-        await txn.insert('habit_streak_days', {
-          'streak_id': id,
-          'day_index': day,
-          'is_done': 0,
-        });
-      }
+    final id = await db.insert('habit_streaks', {
+      'name': cleanName,
+      'start_date': startDate,
+      'target_length': targetLength,
+      'attempt': attempt,
+      'created_at': createdAt,
     });
 
     return HabitStreak(
       id: id,
       name: cleanName,
-      month: month,
-      year: year,
+      startDate: startDate,
+      targetLength: targetLength,
       attempt: attempt,
       createdAt: createdAt,
-      days: List.filled(total, false),
+      doneDates: const {},
     );
   }
 
-  Future<void> toggleDay(int streakId, int dayIndex) async {
+  /// Toggles one date for one streak. Refuses future dates -- this is the
+  /// actual enforcement point for "you can't tick ahead"; the UI disabling
+  /// the tap is only a convenience on top of this.
+  Future<void> toggleDay(int streakId, String dayKey) async {
+    if (DayKey.daysBetween(DayKey.today(), dayKey) > 0) {
+      throw StateError('Cannot tick a day that has not happened yet.');
+    }
+
     final db = await _db.database;
-    final rows = await db.query(
+    final existing = await db.query(
       'habit_streak_days',
-      where: 'streak_id = ? AND day_index = ?',
-      whereArgs: [streakId, dayIndex],
+      where: 'streak_id = ? AND day_key = ?',
+      whereArgs: [streakId, dayKey],
       limit: 1,
     );
-    if (rows.isEmpty) return;
 
-    final isDone = (rows.first['is_done'] as int) == 1;
-    await db.update(
-      'habit_streak_days',
-      {'is_done': isDone ? 0 : 1},
-      where: 'streak_id = ? AND day_index = ?',
-      whereArgs: [streakId, dayIndex],
-    );
+    if (existing.isEmpty) {
+      await db.insert(
+          'habit_streak_days', {'streak_id': streakId, 'day_key': dayKey});
+    } else {
+      await db.delete(
+        'habit_streak_days',
+        where: 'streak_id = ? AND day_key = ?',
+        whereArgs: [streakId, dayKey],
+      );
+    }
   }
 
   Future<void> delete(int streakId) async {
@@ -115,7 +119,8 @@ class HabitStreakRepository {
     // foreign key -- cascade behaviour varies across sqflite platform
     // backends, so this stays correct even where it's not enforced.
     await db.transaction((txn) async {
-      await txn.delete('habit_streak_days', where: 'streak_id = ?', whereArgs: [streakId]);
+      await txn.delete('habit_streak_days',
+          where: 'streak_id = ?', whereArgs: [streakId]);
       await txn.delete('habit_streaks', where: 'id = ?', whereArgs: [streakId]);
     });
   }
