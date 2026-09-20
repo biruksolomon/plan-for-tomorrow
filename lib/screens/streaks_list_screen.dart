@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/day_key.dart';
 import '../core/theme.dart';
 import '../data/models/habit_streak.dart';
 import '../state/habit_streaks_state.dart';
@@ -26,7 +27,8 @@ class StreaksListScreen extends StatelessWidget {
       children: [
         PageMasthead(
           title: 'Streaks',
-          subtitle: 'Each one is tied to a real month. Tick a day, watch the count go up.',
+          subtitle:
+              'Each one is tied to a real month. Tick a day, watch the count go up.',
         ),
         const SizedBox(height: 22),
         if (state.streaks.isEmpty)
@@ -54,7 +56,8 @@ class _StreakCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => StreakDetailScreen(streakId: streak.id)),
+        MaterialPageRoute(
+            builder: (_) => StreakDetailScreen(streakId: streak.id)),
       ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -76,7 +79,7 @@ class _StreakCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '${streak.monthLabel}  ·  Attempt ${streak.attempt}',
+                    'Started ${DayKey.pretty(streak.startDate)}  ·  Attempt ${streak.attempt}',
                     style: AppTheme.body(12.5, color: AppColors.muted),
                   ),
                 ],
@@ -86,12 +89,13 @@ class _StreakCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '${streak.currentStreakFromDay1}',
+                  '${streak.currentStreakFromStart}',
                   style: AppTheme.display(28, color: AppColors.accent),
                 ),
                 Text(
                   'DAY STREAK',
-                  style: AppTheme.body(10, color: AppColors.muted, weight: FontWeight.w700),
+                  style: AppTheme.body(10,
+                      color: AppColors.muted, weight: FontWeight.w700),
                 ),
               ],
             ),
