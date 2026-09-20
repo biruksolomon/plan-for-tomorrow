@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/day_key.dart';
 import '../core/theme.dart';
 import '../data/models/habit_streak.dart';
 import '../state/habit_streaks_state.dart';
@@ -51,29 +52,29 @@ class StreakDetailScreen extends StatelessWidget {
               Expanded(
                 child: Text(s.name.toUpperCase(), style: AppTheme.display(34)),
               ),
-              CounterBadge(value: '${s.currentStreakFromDay1}', label: 'DAY\nSTREAK'),
+              CounterBadge(
+                  value: '${s.currentStreakFromStart}', label: 'DAY\nSTREAK'),
             ],
           ),
           const SizedBox(height: 6),
           Text(
-            '${s.monthLabel}  ·  Attempt ${s.attempt}',
+            'Started ${DayKey.pretty(s.startDate)}  ·  Attempt ${s.attempt}',
             style: AppTheme.body(13.5, color: AppColors.muted),
           ),
           const SizedBox(height: 18),
           Container(height: 3, color: AppColors.ink),
           const SizedBox(height: 22),
-
           Row(
             children: [
-              _statBox('${s.currentStreakFromDay1}', 'CURRENT STREAK\n(FROM DAY 1)'),
+              _statBox('${s.currentStreakFromStart}',
+                  'CURRENT STREAK\n(FROM DAY 1)'),
               const SizedBox(width: 10),
               _statBox('${s.totalDone}', 'DAYS TICKED\nTOTAL'),
               const SizedBox(width: 10),
-              _statBox('${s.days.length}', 'DAYS THIS\nMONTH'),
+              _statBox('${s.elapsedDays}/${s.targetLength}', 'DAY OF\nTARGET'),
             ],
           ),
           const SizedBox(height: 22),
-
           GridView.count(
             crossAxisCount: 7,
             shrinkWrap: true,
@@ -82,16 +83,10 @@ class StreakDetailScreen extends StatelessWidget {
             crossAxisSpacing: 8,
             childAspectRatio: 0.95,
             children: [
-              for (var i = 0; i < s.days.length; i++)
-                _DayCell(
-                  dayNumber: i + 1,
-                  isDone: s.days[i],
-                  isMilestone: milestones.contains(i + 1),
-                  onTap: () => context.read<HabitStreaksState>().toggleDay(s.id, i + 1),
-                ),
+              for (var day = 1; day <= s.targetLength; day++)
+                _dayCell(context, s, day, milestones.contains(day)),
             ],
           ),
-
           const SizedBox(height: 18),
           Wrap(
             spacing: 16,
@@ -99,10 +94,12 @@ class StreakDetailScreen extends StatelessWidget {
             children: [
               _legendItem(AppColors.accent, 'Ticked'),
               _legendItem(AppColors.paper2, 'Not yet', border: AppColors.ink),
-              _legendItem(Colors.transparent, 'Milestone day', border: AppColors.gold),
+              _legendItem(AppColors.paper, 'Not happened yet',
+                  border: AppColors.muted),
+              _legendItem(Colors.transparent, 'Milestone day',
+                  border: AppColors.gold),
             ],
           ),
-
           const SizedBox(height: 30),
           OutlinedButton(
             onPressed: () => _confirmDelete(context, s),
@@ -113,18 +110,36 @@ class StreakDetailScreen extends StatelessWidget {
             ),
             child: Text(
               'Delete this streak',
-              style: AppTheme.body(13, color: AppColors.accent, weight: FontWeight.w700),
+              style: AppTheme.body(13,
+                  color: AppColors.accent, weight: FontWeight.w700),
             ),
           ),
           const SizedBox(height: 20),
           Text(
-            'Tap a box to tick or untick a day. The streak counts consecutive '
-            'ticks starting from day 1.',
+            'Tap a box to tick or untick a day. Days that haven\'t happened yet '
+            'are locked -- the streak counts consecutive ticks starting from day 1.',
             textAlign: TextAlign.center,
             style: AppTheme.body(12, color: AppColors.muted),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _dayCell(
+      BuildContext context, HabitStreak s, int day, bool isMilestone) {
+    final key = s.dayKeyFor(day);
+    final locked = s.isFuture(key);
+    final done = s.isDoneOn(key);
+
+    return _DayCell(
+      dayNumber: day,
+      isDone: done,
+      isLocked: locked,
+      isMilestone: isMilestone,
+      onTap: locked
+          ? null
+          : () => context.read<HabitStreaksState>().toggleDay(s.id, key),
     );
   }
 
@@ -140,9 +155,13 @@ class StreakDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(value, style: AppTheme.display(28, color: AppColors.accent)),
+            Text(value, style: AppTheme.display(24, color: AppColors.accent)),
             const SizedBox(height: 4),
-            Text(label, style: AppTheme.body(10, color: AppColors.muted, weight: FontWeight.w700, height: 1.25)),
+            Text(label,
+                style: AppTheme.body(10,
+                    color: AppColors.muted,
+                    weight: FontWeight.w700,
+                    height: 1.25)),
           ],
         ),
       ),
@@ -181,11 +200,14 @@ class StreakDetailScreen extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('Keep it', style: AppTheme.body(14, color: AppColors.ink)),
+            child:
+                Text('Keep it', style: AppTheme.body(14, color: AppColors.ink)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('Delete', style: AppTheme.body(14, color: AppColors.accent, weight: FontWeight.w700)),
+            child: Text('Delete',
+                style: AppTheme.body(14,
+                    color: AppColors.accent, weight: FontWeight.w700)),
           ),
         ],
       ),
@@ -200,57 +222,76 @@ class StreakDetailScreen extends StatelessWidget {
 class _DayCell extends StatelessWidget {
   final int dayNumber;
   final bool isDone;
+  final bool isLocked;
   final bool isMilestone;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _DayCell({
     required this.dayNumber,
     required this.isDone,
+    required this.isLocked,
     required this.isMilestone,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final bg = isDone
+        ? AppColors.accent
+        : (isLocked ? AppColors.paper : AppColors.paper2);
+    final borderColor = isMilestone
+        ? AppColors.gold
+        : (isDone
+            ? AppColors.accent
+            : (isLocked
+                ? AppColors.muted.withValues(alpha: 0.4)
+                : AppColors.ink));
+    final textColor = isDone
+        ? AppColors.accentTint
+        : (isLocked ? AppColors.muted.withValues(alpha: 0.5) : AppColors.muted);
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
         decoration: BoxDecoration(
-          color: isDone ? AppColors.accent : AppColors.paper2,
+          color: bg,
           borderRadius: BorderRadius.circular(7),
-          border: Border.all(
-            color: isMilestone ? AppColors.gold : (isDone ? AppColors.accent : AppColors.ink),
-            width: isMilestone ? 2.2 : 1.5,
-          ),
+          border:
+              Border.all(color: borderColor, width: isMilestone ? 2.2 : 1.5),
         ),
         padding: const EdgeInsets.all(6),
         child: Stack(
           children: [
             Text(
               '$dayNumber'.padLeft(2, '0'),
-              style: AppTheme.body(
-                11,
-                color: isDone ? AppColors.accentTint : AppColors.muted,
-                weight: FontWeight.w700,
-              ),
+              style:
+                  AppTheme.body(11, color: textColor, weight: FontWeight.w700),
             ),
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                width: 14,
-                height: 14,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isDone ? AppColors.accentTint : Colors.transparent,
-                  border: Border.all(
-                    color: isDone ? AppColors.accentTint : AppColors.muted,
-                    width: 1.4,
+            if (isLocked)
+              const Positioned(
+                right: 2,
+                bottom: 2,
+                child:
+                    Icon(Icons.lock_outline, size: 13, color: AppColors.muted),
+              )
+            else
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isDone ? AppColors.accentTint : Colors.transparent,
+                    border: Border.all(
+                      color: isDone ? AppColors.accentTint : AppColors.muted,
+                      width: 1.4,
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),
