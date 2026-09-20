@@ -34,10 +34,23 @@ class HabitStreakRepository {
     final id = row['id'] as int;
     final dayRows = await db.query(
       'habit_streak_days',
-      columns: ['day_key'],
+      columns: ['day_key', 'status', 'reason'],
       where: 'streak_id = ?',
       whereArgs: [id],
     );
+
+    final doneDates = <String>{};
+    final missedReasons = <String, String>{};
+    for (final r in dayRows) {
+      final key = r['day_key'] as String;
+      final status = r['status'] as String;
+      if (status == 'done') {
+        doneDates.add(key);
+      } else if (status == 'missed') {
+        missedReasons[key] = (r['reason'] as String?) ?? '';
+      }
+    }
+
     return HabitStreak(
       id: id,
       name: row['name'] as String,
@@ -45,13 +58,14 @@ class HabitStreakRepository {
       targetLength: row['target_length'] as int,
       attempt: row['attempt'] as int,
       createdAt: row['created_at'] as int,
-      doneDates: {for (final r in dayRows) r['day_key'] as String},
+      doneDates: doneDates,
+      missedReasons: missedReasons,
     );
   }
 
   /// [startDate] must not be in the future -- there's no such thing as
-  /// starting a streak tomorrow. This is enforced here, not just left to
-  /// the date picker's bounds, so the rule holds regardless of caller.
+  /// starting a streak tomorrow. This only anchors day-1 for counting; it
+  /// does not restrict which days can later be marked.
   Future<HabitStreak> create({
     required String name,
     required String startDate,
@@ -82,35 +96,66 @@ class HabitStreakRepository {
       attempt: attempt,
       createdAt: createdAt,
       doneDates: const {},
+      missedReasons: const {},
     );
   }
 
-  /// Toggles one date for one streak. Refuses future dates -- this is the
-  /// actual enforcement point for "you can't tick ahead"; the UI disabling
-  /// the tap is only a convenience on top of this.
-  Future<void> toggleDay(int streakId, String dayKey) async {
+  void _assertNotFuture(String dayKey) {
     if (DayKey.daysBetween(DayKey.today(), dayKey) > 0) {
-      throw StateError('Cannot tick a day that has not happened yet.');
+      throw StateError('Cannot log a day that has not happened yet.');
+    }
+  }
+
+  /// Marks a day done, overwriting any prior missed status (and discarding
+  /// its reason) on that same date -- a direct "set to done", not a raw
+  /// toggle. Call [clearDay] to blank a day that's already done.
+  Future<void> markDone(int streakId, String dayKey) async {
+    _assertNotFuture(dayKey);
+    final db = await _db.database;
+    await db.insert(
+      'habit_streak_days',
+      {
+        'streak_id': streakId,
+        'day_key': dayKey,
+        'status': 'done',
+        'reason': null
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Marks a day missed. [reason] is required and cannot be blank -- a
+  /// missed day always has to say why, so the record is actually useful
+  /// later. Overwrites any prior done status on that date.
+  Future<void> markMissed(int streakId, String dayKey, String reason) async {
+    _assertNotFuture(dayKey);
+    final cleanReason = reason.trim();
+    if (cleanReason.isEmpty) {
+      throw ArgumentError('A reason is required to mark a day missed.');
     }
 
     final db = await _db.database;
-    final existing = await db.query(
+    await db.insert(
+      'habit_streak_days',
+      {
+        'streak_id': streakId,
+        'day_key': dayKey,
+        'status': 'missed',
+        'reason': cleanReason
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Clears a day back to blank -- removing a done or missed status,
+  /// reason included. No reason needed to clear; only to set missed.
+  Future<void> clearDay(int streakId, String dayKey) async {
+    final db = await _db.database;
+    await db.delete(
       'habit_streak_days',
       where: 'streak_id = ? AND day_key = ?',
       whereArgs: [streakId, dayKey],
-      limit: 1,
     );
-
-    if (existing.isEmpty) {
-      await db.insert(
-          'habit_streak_days', {'streak_id': streakId, 'day_key': dayKey});
-    } else {
-      await db.delete(
-        'habit_streak_days',
-        where: 'streak_id = ? AND day_key = ?',
-        whereArgs: [streakId, dayKey],
-      );
-    }
   }
 
   Future<void> delete(int streakId) async {
