@@ -15,7 +15,7 @@ void main() {
 
   setUp(() async {
     db = await databaseFactory.openDatabase(inMemoryDatabasePath);
-    await AppDatabase.createSchema(db, 3);
+    await AppDatabase.createSchema(db, 4);
     repo = HabitStreakRepository(db: AppDatabase()..useExisting(db));
   });
 
@@ -24,169 +24,188 @@ void main() {
   group('creation', () {
     test('starting today is allowed', () async {
       final s = await repo.create(
-        name: 'Reading',
-        startDate: DayKey.today(),
-        targetLength: 30,
-        attempt: 1,
-      );
+          name: 'Reading',
+          startDate: DayKey.today(),
+          targetLength: 30,
+          attempt: 1);
       expect(s.startDate, DayKey.today());
       expect(s.doneDates, isEmpty);
+      expect(s.missedReasons, isEmpty);
     });
 
     test('backdating the start date is allowed', () async {
       final backdated = DayKey.addDays(DayKey.today(), -5);
       final s = await repo.create(
-        name: 'Reading',
-        startDate: backdated,
-        targetLength: 30,
-        attempt: 1,
-      );
+          name: 'Reading', startDate: backdated, targetLength: 30, attempt: 1);
       expect(s.startDate, backdated);
     });
 
     test('starting in the future is rejected', () async {
-      final tomorrow = DayKey.tomorrow();
       expect(
         () => repo.create(
-            name: 'Reading', startDate: tomorrow, targetLength: 30, attempt: 1),
+            name: 'Reading',
+            startDate: DayKey.tomorrow(),
+            targetLength: 30,
+            attempt: 1),
         throwsA(isA<StateError>()),
       );
     });
   });
 
-  group('the future-day lock', () {
-    test('ticking tomorrow is rejected even if the streak started today',
+  group('the only lock is the future', () {
+    test('marking tomorrow done is rejected even if the streak started today',
         () async {
-      final s = await repo.create(
-        name: 'Test',
-        startDate: DayKey.today(),
-        targetLength: 30,
-        attempt: 1,
-      );
-      expect(
-        () => repo.toggleDay(s.id, DayKey.tomorrow()),
-        throwsA(isA<StateError>()),
-      );
-    });
-
-    test('ticking today and the past is allowed', () async {
-      final start = DayKey.addDays(DayKey.today(), -2);
-      final s = await repo.create(
-          name: 'Test', startDate: start, targetLength: 30, attempt: 1);
-
-      await repo.toggleDay(s.id, start); // day 1, two days ago
-      await repo.toggleDay(s.id, DayKey.today()); // day 3, today
-
-      final reloaded = await repo.getById(s.id);
-      expect(reloaded!.doneDates.length, 2);
-    });
-  });
-
-  group('backdating resolves the original conflict', () {
-    test('a streak backdated 5 days already has those days elapsed, not locked',
-        () async {
-      final start = DayKey.addDays(DayKey.today(), -5);
-      final s = await repo.create(
-          name: 'Test', startDate: start, targetLength: 30, attempt: 1);
-
-      // Every one of the 6 elapsed days (day 1..6, i.e. 5 days ago through
-      // today) should be tickable -- none of them should throw, unlike the
-      // old month-grid design where "days before today" were force-locked.
-      for (var i = 0; i <= 5; i++) {
-        final key = DayKey.addDays(start, i);
-        await repo.toggleDay(s.id, key); // must not throw
-      }
-
-      final reloaded = await repo.getById(s.id);
-      expect(reloaded!.doneDates.length, 6);
-      expect(reloaded.currentStreakFromStart, 6);
-    });
-  });
-
-  group('streak math', () {
-    test('current streak counts consecutive ticks from day 1', () async {
-      final start = DayKey.addDays(DayKey.today(), -4);
-      final s = await repo.create(
-          name: 'Test', startDate: start, targetLength: 30, attempt: 1);
-
-      await repo.toggleDay(s.id, DayKey.addDays(start, 0)); // day 1
-      await repo.toggleDay(s.id, DayKey.addDays(start, 1)); // day 2
-      await repo.toggleDay(s.id, DayKey.addDays(start, 2)); // day 3
-
-      final reloaded = await repo.getById(s.id);
-      expect(reloaded!.currentStreakFromStart, 3);
-    });
-
-    test('a tick out of order does not extend the day-1 streak', () async {
-      final start = DayKey.addDays(DayKey.today(), -4);
-      final s = await repo.create(
-          name: 'Test', startDate: start, targetLength: 30, attempt: 1);
-
-      await repo.toggleDay(s.id, DayKey.addDays(start, 0)); // day 1
-      await repo.toggleDay(
-          s.id, DayKey.addDays(start, 3)); // day 4, skips ahead
-
-      final reloaded = await repo.getById(s.id);
-      expect(reloaded!.currentStreakFromStart, 1);
-      expect(reloaded.totalDone, 2);
-    });
-
-    test(
-        'an unticked day does not falsely extend past it, even with days ticked later',
-        () async {
-      final start = DayKey.addDays(DayKey.today(), -6);
-      final s = await repo.create(
-          name: 'Test', startDate: start, targetLength: 30, attempt: 1);
-
-      await repo.toggleDay(s.id, DayKey.addDays(start, 0));
-      await repo.toggleDay(s.id, DayKey.addDays(start, 1));
-      // day index 2 (the 3rd day) deliberately left unticked
-      await repo.toggleDay(s.id, DayKey.addDays(start, 3));
-      await repo.toggleDay(s.id, DayKey.addDays(start, 4));
-
-      final reloaded = await repo.getById(s.id);
-      expect(reloaded!.currentStreakFromStart, 2);
-    });
-
-    test('untoggling removes a tick', () async {
-      final start = DayKey.today();
-      final s = await repo.create(
-          name: 'Test', startDate: start, targetLength: 30, attempt: 1);
-
-      await repo.toggleDay(s.id, start);
-      var reloaded = await repo.getById(s.id);
-      expect(reloaded!.doneDates.contains(start), isTrue);
-
-      await repo.toggleDay(s.id, start); // untick
-      reloaded = await repo.getById(s.id);
-      expect(reloaded!.doneDates.contains(start), isFalse);
-    });
-  });
-
-  group('elapsed days and milestones', () {
-    test('elapsed days is clamped to target length', () async {
-      final start = DayKey.addDays(DayKey.today(), -40);
-      final s = await repo.create(
-          name: 'Test', startDate: start, targetLength: 30, attempt: 1);
-      expect(s.elapsedDays, 30);
-    });
-
-    test('elapsed days for a streak started today is 1', () async {
       final s = await repo.create(
           name: 'Test',
           startDate: DayKey.today(),
           targetLength: 30,
           attempt: 1);
-      expect(s.elapsedDays, 1);
+      expect(() => repo.markDone(s.id, DayKey.tomorrow()),
+          throwsA(isA<StateError>()));
     });
 
-    test('milestones adapt to a short target length', () async {
+    test('marking tomorrow missed is also rejected', () async {
       final s = await repo.create(
           name: 'Test',
           startDate: DayKey.today(),
-          targetLength: 14,
+          targetLength: 30,
           attempt: 1);
-      expect(s.milestoneDays, [7, 14]);
+      expect(() => repo.markMissed(s.id, DayKey.tomorrow(), 'no reason'),
+          throwsA(isA<StateError>()));
+    });
+
+    test(
+        'a day before the streak\'s own start date is still markable -- '
+        'the start date only anchors the count, it does not lock anything',
+        () async {
+      // Streak "starts" today, but a day from well before that is still
+      // open to log. This is the direct fix for the original bug report:
+      // only today was tappable because start-date locking blocked
+      // everything before it.
+      final s = await repo.create(
+          name: 'Test',
+          startDate: DayKey.today(),
+          targetLength: 30,
+          attempt: 1);
+      final longAgo = DayKey.addDays(DayKey.today(), -10);
+
+      await repo.markDone(s.id, longAgo); // must not throw
+
+      final reloaded = await repo.getById(s.id);
+      expect(reloaded!.doneDates.contains(longAgo), isTrue);
+    });
+  });
+
+  group('tri-state: done / missed / blank', () {
+    test('markDone sets a day done', () async {
+      final s = await repo.create(
+          name: 'Test',
+          startDate: DayKey.today(),
+          targetLength: 30,
+          attempt: 1);
+      await repo.markDone(s.id, DayKey.today());
+
+      final reloaded = await repo.getById(s.id);
+      expect(reloaded!.isDoneOn(DayKey.today()), isTrue);
+      expect(reloaded.isMissedOn(DayKey.today()), isFalse);
+    });
+
+    test('markMissed requires a non-empty reason', () async {
+      final s = await repo.create(
+          name: 'Test',
+          startDate: DayKey.today(),
+          targetLength: 30,
+          attempt: 1);
+      expect(() => repo.markMissed(s.id, DayKey.today(), ''),
+          throwsA(isA<ArgumentError>()));
+      expect(() => repo.markMissed(s.id, DayKey.today(), '   '),
+          throwsA(isA<ArgumentError>()));
+    });
+
+    test('markMissed with a real reason stores it and is retrievable',
+        () async {
+      final s = await repo.create(
+          name: 'Test',
+          startDate: DayKey.today(),
+          targetLength: 30,
+          attempt: 1);
+      await repo.markMissed(s.id, DayKey.today(), 'Was sick');
+
+      final reloaded = await repo.getById(s.id);
+      expect(reloaded!.isMissedOn(DayKey.today()), isTrue);
+      expect(reloaded.missedReasonOn(DayKey.today()), 'Was sick');
+    });
+
+    test('markDone on a missed day overwrites it and drops the reason',
+        () async {
+      final s = await repo.create(
+          name: 'Test',
+          startDate: DayKey.today(),
+          targetLength: 30,
+          attempt: 1);
+      await repo.markMissed(s.id, DayKey.today(), 'Was sick');
+      await repo.markDone(s.id, DayKey.today());
+
+      final reloaded = await repo.getById(s.id);
+      expect(reloaded!.isDoneOn(DayKey.today()), isTrue);
+      expect(reloaded.isMissedOn(DayKey.today()), isFalse);
+    });
+
+    test('clearDay returns a day to blank from either state', () async {
+      final s = await repo.create(
+          name: 'Test',
+          startDate: DayKey.today(),
+          targetLength: 30,
+          attempt: 1);
+      await repo.markDone(s.id, DayKey.today());
+      await repo.clearDay(s.id, DayKey.today());
+
+      final reloaded = await repo.getById(s.id);
+      expect(reloaded!.isBlankOn(DayKey.today()), isTrue);
+    });
+
+    test('clearDay needs no reason to remove a missed day', () async {
+      final s = await repo.create(
+          name: 'Test',
+          startDate: DayKey.today(),
+          targetLength: 30,
+          attempt: 1);
+      await repo.markMissed(s.id, DayKey.today(), 'Was sick');
+      await repo.clearDay(
+          s.id, DayKey.today()); // must not throw, no reason passed
+
+      final reloaded = await repo.getById(s.id);
+      expect(reloaded!.isBlankOn(DayKey.today()), isTrue);
+    });
+  });
+
+  group('streak math', () {
+    test('current streak counts consecutive done days from day 1', () async {
+      final start = DayKey.addDays(DayKey.today(), -4);
+      final s = await repo.create(
+          name: 'Test', startDate: start, targetLength: 30, attempt: 1);
+
+      await repo.markDone(s.id, DayKey.addDays(start, 0));
+      await repo.markDone(s.id, DayKey.addDays(start, 1));
+      await repo.markDone(s.id, DayKey.addDays(start, 2));
+
+      final reloaded = await repo.getById(s.id);
+      expect(reloaded!.currentStreakFromStart, 3);
+    });
+
+    test('a missed day breaks the streak exactly like a blank one', () async {
+      final start = DayKey.addDays(DayKey.today(), -4);
+      final s = await repo.create(
+          name: 'Test', startDate: start, targetLength: 30, attempt: 1);
+
+      await repo.markDone(s.id, DayKey.addDays(start, 0));
+      await repo.markMissed(s.id, DayKey.addDays(start, 1), 'Overslept');
+      await repo.markDone(s.id, DayKey.addDays(start, 2));
+
+      final reloaded = await repo.getById(s.id);
+      expect(reloaded!.currentStreakFromStart, 1);
+      expect(reloaded.totalDone, 2);
+      expect(reloaded.totalMissed, 1);
     });
   });
 
@@ -208,13 +227,13 @@ void main() {
   });
 
   group('deletion', () {
-    test('deleting a streak removes its ticked days too', () async {
+    test('deleting a streak removes its logged days too', () async {
       final s = await repo.create(
           name: 'Test',
           startDate: DayKey.today(),
           targetLength: 30,
           attempt: 1);
-      await repo.toggleDay(s.id, DayKey.today());
+      await repo.markDone(s.id, DayKey.today());
       await repo.delete(s.id);
 
       expect(await repo.getById(s.id), isNull);
