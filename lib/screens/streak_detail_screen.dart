@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../core/day_key.dart';
@@ -7,10 +8,42 @@ import '../data/models/habit_streak.dart';
 import '../state/habit_streaks_state.dart';
 import '../widgets/common.dart';
 
-class StreakDetailScreen extends StatelessWidget {
+enum _Pen { tick, missed }
+
+class StreakDetailScreen extends StatefulWidget {
   final int streakId;
 
   const StreakDetailScreen({super.key, required this.streakId});
+
+  @override
+  State<StreakDetailScreen> createState() => _StreakDetailScreenState();
+}
+
+class _StreakDetailScreenState extends State<StreakDetailScreen> {
+  late DateTime _viewMonth;
+  _Pen _pen = _Pen.tick;
+
+  @override
+  void initState() {
+    super.initState();
+    // Always opens on today's month -- "today is the 20th" means the
+    // person expects to see this month, not the month the streak started
+    // in (those can differ once a streak runs long enough).
+    final now = DateTime.now();
+    _viewMonth = DateTime(now.year, now.month);
+  }
+
+  void _shiftMonth(int delta) {
+    setState(
+        () => _viewMonth = DateTime(_viewMonth.year, _viewMonth.month + delta));
+  }
+
+  /// No reason to page into a month that hasn't started -- everything in
+  /// it would be locked anyway.
+  bool get _canGoForward {
+    final now = DateTime.now();
+    return _viewMonth.isBefore(DateTime(now.year, now.month));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +51,7 @@ class StreakDetailScreen extends StatelessWidget {
 
     HabitStreak? streak;
     for (final s in state.streaks) {
-      if (s.id == streakId) {
+      if (s.id == widget.streakId) {
         streak = s;
         break;
       }
@@ -34,7 +67,11 @@ class StreakDetailScreen extends StatelessWidget {
     }
 
     final s = streak;
-    final milestones = s.milestoneDays;
+    // Real dates, computed once per build -- the milestone *count* (7/14/
+    // 21/target) still comes from the streak's own day-1..N math, but each
+    // one is converted to the actual date it falls on so it can be found
+    // and highlighted no matter which month is currently on screen.
+    final milestoneDates = {for (final m in s.milestoneDays) s.dayKeyFor(m)};
 
     return Scaffold(
       appBar: AppBar(
@@ -69,34 +106,30 @@ class StreakDetailScreen extends StatelessWidget {
               _statBox('${s.currentStreakFromStart}',
                   'CURRENT STREAK\n(FROM DAY 1)'),
               const SizedBox(width: 10),
-              _statBox('${s.totalDone}', 'DAYS TICKED\nTOTAL'),
+              _statBox('${s.totalDone}', 'DAYS DONE\nTOTAL'),
               const SizedBox(width: 10),
-              _statBox('${s.elapsedDays}/${s.targetLength}', 'DAY OF\nTARGET'),
+              _statBox('${s.totalMissed}', 'DAYS MISSED\nTOTAL'),
             ],
           ),
           const SizedBox(height: 22),
-          GridView.count(
-            crossAxisCount: 7,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            childAspectRatio: 0.95,
-            children: [
-              for (var day = 1; day <= s.targetLength; day++)
-                _dayCell(context, s, day, milestones.contains(day)),
-            ],
-          ),
+          _penSelector(),
+          const SizedBox(height: 20),
+          _monthBar(),
+          const SizedBox(height: 14),
+          _weekdayHeader(),
+          const SizedBox(height: 8),
+          _calendar(s, milestoneDates),
           const SizedBox(height: 18),
           Wrap(
-            spacing: 16,
+            spacing: 14,
             runSpacing: 8,
             children: [
-              _legendItem(AppColors.accent, 'Ticked'),
-              _legendItem(AppColors.paper2, 'Not yet', border: AppColors.ink),
-              _legendItem(AppColors.paper, 'Not happened yet',
-                  border: AppColors.muted),
-              _legendItem(Colors.transparent, 'Milestone day',
+              _legendItem(AppColors.accent, 'Done'),
+              _legendItem(AppColors.paper2, 'Missed',
+                  border: AppColors.accent, marker: '✕'),
+              _legendItem(AppColors.paper2, 'Blank', border: AppColors.ink),
+              _legendItem(AppColors.paper, 'Locked', border: AppColors.muted),
+              _legendItem(Colors.transparent, 'Milestone',
                   border: AppColors.gold),
             ],
           ),
@@ -116,8 +149,8 @@ class StreakDetailScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
-            'Tap a box to tick or untick a day. Days that haven\'t happened yet '
-            'are locked -- the streak counts consecutive ticks starting from day 1.',
+            'Pick a pen above, then tap any day up to today. Marking a day '
+            'missed asks why -- tap it again with Missed selected to clear it.',
             textAlign: TextAlign.center,
             style: AppTheme.body(12, color: AppColors.muted),
           ),
@@ -126,22 +159,263 @@ class StreakDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _dayCell(
-      BuildContext context, HabitStreak s, int day, bool isMilestone) {
-    final key = s.dayKeyFor(day);
+  Widget _penSelector() {
+    Widget btn(_Pen p, String label, IconData icon) {
+      final active = _pen == p;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => setState(() => _pen = p),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: active ? AppColors.accent : AppColors.paper2,
+              border: Border.all(
+                  color: active ? AppColors.accent : AppColors.ink, width: 1.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon,
+                    size: 16,
+                    color: active ? AppColors.accentTint : AppColors.ink),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: AppTheme.body(
+                    13,
+                    weight: FontWeight.w700,
+                    color: active ? AppColors.accentTint : AppColors.ink,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        btn(_Pen.tick, 'Tick', Icons.check),
+        const SizedBox(width: 10),
+        btn(_Pen.missed, 'Missed', Icons.close),
+      ],
+    );
+  }
+
+  Widget _monthBar() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        IconButton(
+          onPressed: () => _shiftMonth(-1),
+          icon: const Icon(Icons.chevron_left, color: AppColors.ink),
+        ),
+        Text(
+          DateFormat('MMMM yyyy').format(_viewMonth).toUpperCase(),
+          style: AppTheme.display(22),
+        ),
+        IconButton(
+          onPressed: _canGoForward ? () => _shiftMonth(1) : null,
+          icon: Icon(
+            Icons.chevron_right,
+            color: _canGoForward
+                ? AppColors.ink
+                : AppColors.muted.withValues(alpha: 0.4),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _weekdayHeader() {
+    const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    return Row(
+      children: labels
+          .map((l) => Expanded(
+                child: Center(
+                  child: Text(l,
+                      style: AppTheme.body(12,
+                          color: AppColors.muted, weight: FontWeight.w700)),
+                ),
+              ))
+          .toList(),
+    );
+  }
+
+  Widget _calendar(HabitStreak s, Set<String> milestoneDates) {
+    final first = DateTime(_viewMonth.year, _viewMonth.month, 1);
+    final daysInMonth = DateTime(_viewMonth.year, _viewMonth.month + 1, 0).day;
+    // DateTime.weekday is 1=Mon, and the grid starts on Monday.
+    final leading = first.weekday - 1;
+
+    final cells = <Widget>[
+      for (var i = 0; i < leading; i++) const SizedBox.shrink(),
+      for (var d = 1; d <= daysInMonth; d++)
+        _dayCell(
+            s, DateTime(_viewMonth.year, _viewMonth.month, d), milestoneDates),
+    ];
+
+    return GridView.count(
+      crossAxisCount: 7,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 6,
+      crossAxisSpacing: 6,
+      children: cells,
+    );
+  }
+
+  Widget _dayCell(HabitStreak s, DateTime date, Set<String> milestoneDates) {
+    final key = DayKey.of(date);
+    // The only lock is the future. A day being before the streak's own
+    // start date does not block it -- see the model's doc comment.
     final locked = s.isFuture(key);
     final done = s.isDoneOn(key);
+    final missed = s.isMissedOn(key);
+    final isMilestone = milestoneDates.contains(key);
+    final isToday = key == DayKey.today();
 
-    return _DayCell(
-      streakDay: day,
-      calendarDay: DayKey.parse(key).day,
-      isDone: done,
-      isLocked: locked,
-      isMilestone: isMilestone,
-      isToday: key == DayKey.today(),
-      onTap: locked
-          ? null
-          : () => context.read<HabitStreaksState>().toggleDay(s.id, key),
+    Color bg;
+    Color borderColor;
+    Color textColor;
+    if (done) {
+      bg = AppColors.accent;
+      borderColor = AppColors.accent;
+      textColor = AppColors.accentTint;
+    } else if (missed) {
+      bg = AppColors.paper2;
+      borderColor = AppColors.accent;
+      textColor = AppColors.accent;
+    } else if (locked) {
+      bg = AppColors.paper;
+      borderColor = AppColors.muted.withValues(alpha: 0.35);
+      textColor = AppColors.muted.withValues(alpha: 0.45);
+    } else {
+      bg = AppColors.paper2;
+      borderColor = AppColors.ink;
+      textColor = AppColors.ink;
+    }
+    if (isMilestone) borderColor = AppColors.gold;
+
+    return GestureDetector(
+      onTap: locked ? null : () => _handleTap(s, key, done, missed),
+      child: Container(
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(
+            color: isToday ? AppColors.ink : borderColor,
+            width: isToday ? 2.2 : (isMilestone ? 2 : 1),
+          ),
+        ),
+        child: Stack(
+          children: [
+            Center(
+              child: Text('${date.day}',
+                  style: AppTheme.body(13,
+                      color: textColor, weight: FontWeight.w600)),
+            ),
+            if (missed)
+              const Positioned(
+                right: 3,
+                bottom: 1,
+                child: Icon(Icons.close, size: 12, color: AppColors.accent),
+              )
+            else if (locked)
+              const Positioned(
+                right: 3,
+                bottom: 2,
+                child:
+                    Icon(Icons.lock_outline, size: 11, color: AppColors.muted),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleTap(
+      HabitStreak s, String dayKey, bool wasDone, bool wasMissed) async {
+    final streaksState = context.read<HabitStreaksState>();
+
+    if (_pen == _Pen.tick) {
+      // A direct "set to done"; tapping an already-done day clears it back
+      // to blank. Switching pens and tapping a missed day overwrites it
+      // (its reason is discarded, same as picking a new answer).
+      if (wasDone) {
+        await streaksState.clearDay(s.id, dayKey);
+      } else {
+        await streaksState.markDone(s.id, dayKey);
+      }
+      return;
+    }
+
+    // Missed pen.
+    if (wasMissed) {
+      await streaksState.clearDay(s.id, dayKey);
+      return;
+    }
+    final reason = await _askReason(context);
+    if (reason == null) return; // cancelled -- day stays exactly as it was
+    await streaksState.markMissed(s.id, dayKey, reason);
+  }
+
+  Future<String?> _askReason(BuildContext context) async {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final canSave = controller.text.trim().isNotEmpty;
+          return AlertDialog(
+            backgroundColor: AppColors.paper,
+            title:
+                Text('Why was this day missed?', style: AppTheme.display(20)),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              maxLines: 3,
+              maxLength: 140,
+              onChanged: (_) => setDialogState(() {}),
+              style: AppTheme.body(14),
+              decoration: InputDecoration(
+                hintText: 'A reason is required to mark this day missed',
+                hintStyle: AppTheme.body(13, color: AppColors.muted),
+                enabledBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: AppColors.ink),
+                ),
+                focusedBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: AppColors.accent, width: 1.5),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(null),
+                child: Text('Cancel',
+                    style: AppTheme.body(14, color: AppColors.ink)),
+              ),
+              TextButton(
+                onPressed: canSave
+                    ? () => Navigator.of(ctx).pop(controller.text.trim())
+                    : null,
+                child: Text(
+                  'Save',
+                  style: AppTheme.body(
+                    14,
+                    weight: FontWeight.w700,
+                    color: canSave ? AppColors.accent : AppColors.muted,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -170,18 +444,24 @@ class StreakDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _legendItem(Color color, String label, {Color? border}) {
+  Widget _legendItem(Color color, String label,
+      {Color? border, String? marker}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           width: 12,
           height: 12,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(3),
             border: Border.all(color: border ?? AppColors.muted, width: 1.5),
           ),
+          child: marker == null
+              ? null
+              : Text(marker,
+                  style: TextStyle(fontSize: 8, color: border, height: 1)),
         ),
         const SizedBox(width: 6),
         Text(label, style: AppTheme.body(11.5, color: AppColors.muted)),
@@ -195,10 +475,8 @@ class StreakDetailScreen extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.paper,
         title: Text('Delete "${s.name}"?', style: AppTheme.display(20)),
-        content: Text(
-          'This cannot be undone.',
-          style: AppTheme.body(14, color: AppColors.muted),
-        ),
+        content: Text('This cannot be undone.',
+            style: AppTheme.body(14, color: AppColors.muted)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -218,106 +496,5 @@ class StreakDetailScreen extends StatelessWidget {
     if (confirmed != true || !context.mounted) return;
     await context.read<HabitStreaksState>().delete(s.id);
     if (context.mounted) Navigator.of(context).pop();
-  }
-}
-
-class _DayCell extends StatelessWidget {
-  final int streakDay;
-  final int calendarDay;
-  final bool isDone;
-  final bool isLocked;
-  final bool isMilestone;
-  final bool isToday;
-  final VoidCallback? onTap;
-
-  const _DayCell({
-    required this.streakDay,
-    required this.calendarDay,
-    required this.isDone,
-    required this.isLocked,
-    required this.isMilestone,
-    required this.isToday,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = isDone
-        ? AppColors.accent
-        : (isLocked ? AppColors.paper : AppColors.paper2);
-    final borderColor = isMilestone
-        ? AppColors.gold
-        : (isDone
-            ? AppColors.accent
-            : (isLocked
-                ? AppColors.muted.withValues(alpha: 0.35)
-                : AppColors.ink));
-    final textColor = isDone
-        ? AppColors.accentTint
-        : (isLocked ? AppColors.muted.withValues(alpha: 0.45) : AppColors.ink);
-
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(7),
-          border: Border.all(
-            // A ring around today makes "which cell am I on" unambiguous,
-            // independent of whatever the streak-day label happens to say.
-            color: isToday ? AppColors.ink : borderColor,
-            width: isToday ? 2.4 : (isMilestone ? 2.2 : 1.5),
-          ),
-        ),
-        padding: const EdgeInsets.all(5),
-        child: Stack(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // The real calendar date is the primary label -- this is
-                // what stops "day 01" reading as "not today" when today
-                // really is day 1 of a streak that starts today.
-                Text(
-                  '$calendarDay',
-                  style: AppTheme.body(15,
-                      color: textColor, weight: FontWeight.w800),
-                ),
-                Text(
-                  'day $streakDay',
-                  style: AppTheme.body(8.5,
-                      color: textColor.withValues(alpha: 0.75)),
-                ),
-              ],
-            ),
-            if (isLocked)
-              const Positioned(
-                right: 1,
-                bottom: 1,
-                child:
-                    Icon(Icons.lock_outline, size: 12, color: AppColors.muted),
-              )
-            else
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  width: 13,
-                  height: 13,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isDone ? AppColors.accentTint : Colors.transparent,
-                    border: Border.all(
-                      color: isDone ? AppColors.accentTint : AppColors.muted,
-                      width: 1.3,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
   }
 }
