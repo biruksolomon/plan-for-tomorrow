@@ -42,9 +42,18 @@ class _NewStreakScreenState extends State<NewStreakScreen> {
   Future<void> _onNameChanged() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) return;
+
     final suggestion =
         await context.read<HabitStreaksState>().suggestNextAttempt(name);
     if (!mounted) return;
+
+    // These queries fire on every keystroke and can resolve out of order --
+    // typing fast enough means the request for "R" can come back *after*
+    // the request for "Reading" and silently overwrite the correct number
+    // with a stale one. Only apply a result if the name it was asked about
+    // is still what's actually in the field right now.
+    if (_nameController.text.trim() != name) return;
+
     _attemptController.text = '$suggestion';
   }
 
