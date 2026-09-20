@@ -43,8 +43,18 @@ class HabitStreaksState extends ChangeNotifier {
     return created;
   }
 
-  Future<void> toggleDay(int streakId, String dayKey) async {
-    await repo.toggleDay(streakId, dayKey);
+  Future<void> markDone(int streakId, String dayKey) async {
+    await repo.markDone(streakId, dayKey);
+    await load();
+  }
+
+  Future<void> markMissed(int streakId, String dayKey, String reason) async {
+    await repo.markMissed(streakId, dayKey, reason);
+    await load();
+  }
+
+  Future<void> clearDay(int streakId, String dayKey) async {
+    await repo.clearDay(streakId, dayKey);
     await load();
   }
 
