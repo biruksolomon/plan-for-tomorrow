@@ -133,10 +133,12 @@ class StreakDetailScreen extends StatelessWidget {
     final done = s.isDoneOn(key);
 
     return _DayCell(
-      dayNumber: day,
+      streakDay: day,
+      calendarDay: DayKey.parse(key).day,
       isDone: done,
       isLocked: locked,
       isMilestone: isMilestone,
+      isToday: key == DayKey.today(),
       onTap: locked
           ? null
           : () => context.read<HabitStreaksState>().toggleDay(s.id, key),
@@ -220,17 +222,21 @@ class StreakDetailScreen extends StatelessWidget {
 }
 
 class _DayCell extends StatelessWidget {
-  final int dayNumber;
+  final int streakDay;
+  final int calendarDay;
   final bool isDone;
   final bool isLocked;
   final bool isMilestone;
+  final bool isToday;
   final VoidCallback? onTap;
 
   const _DayCell({
-    required this.dayNumber,
+    required this.streakDay,
+    required this.calendarDay,
     required this.isDone,
     required this.isLocked,
     required this.isMilestone,
+    required this.isToday,
     required this.onTap,
   });
 
@@ -244,11 +250,11 @@ class _DayCell extends StatelessWidget {
         : (isDone
             ? AppColors.accent
             : (isLocked
-                ? AppColors.muted.withValues(alpha: 0.4)
+                ? AppColors.muted.withValues(alpha: 0.35)
                 : AppColors.ink));
     final textColor = isDone
         ? AppColors.accentTint
-        : (isLocked ? AppColors.muted.withValues(alpha: 0.5) : AppColors.muted);
+        : (isLocked ? AppColors.muted.withValues(alpha: 0.45) : AppColors.ink);
 
     return GestureDetector(
       onTap: onTap,
@@ -257,37 +263,54 @@ class _DayCell extends StatelessWidget {
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(7),
-          border:
-              Border.all(color: borderColor, width: isMilestone ? 2.2 : 1.5),
+          border: Border.all(
+            // A ring around today makes "which cell am I on" unambiguous,
+            // independent of whatever the streak-day label happens to say.
+            color: isToday ? AppColors.ink : borderColor,
+            width: isToday ? 2.4 : (isMilestone ? 2.2 : 1.5),
+          ),
         ),
-        padding: const EdgeInsets.all(6),
+        padding: const EdgeInsets.all(5),
         child: Stack(
           children: [
-            Text(
-              '$dayNumber'.padLeft(2, '0'),
-              style:
-                  AppTheme.body(11, color: textColor, weight: FontWeight.w700),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // The real calendar date is the primary label -- this is
+                // what stops "day 01" reading as "not today" when today
+                // really is day 1 of a streak that starts today.
+                Text(
+                  '$calendarDay',
+                  style: AppTheme.body(15,
+                      color: textColor, weight: FontWeight.w800),
+                ),
+                Text(
+                  'day $streakDay',
+                  style: AppTheme.body(8.5,
+                      color: textColor.withValues(alpha: 0.75)),
+                ),
+              ],
             ),
             if (isLocked)
               const Positioned(
-                right: 2,
-                bottom: 2,
+                right: 1,
+                bottom: 1,
                 child:
-                    Icon(Icons.lock_outline, size: 13, color: AppColors.muted),
+                    Icon(Icons.lock_outline, size: 12, color: AppColors.muted),
               )
             else
               Positioned(
                 right: 0,
                 bottom: 0,
                 child: Container(
-                  width: 14,
-                  height: 14,
+                  width: 13,
+                  height: 13,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: isDone ? AppColors.accentTint : Colors.transparent,
                     border: Border.all(
                       color: isDone ? AppColors.accentTint : AppColors.muted,
-                      width: 1.4,
+                      width: 1.3,
                     ),
                   ),
                 ),
