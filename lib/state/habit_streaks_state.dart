@@ -29,17 +29,22 @@ class HabitStreaksState extends ChangeNotifier {
 
   Future<HabitStreak> create({
     required String name,
-    required int month,
-    required int year,
+    required String startDate,
+    required int targetLength,
     required int attempt,
   }) async {
-    final created = await repo.create(name: name, month: month, year: year, attempt: attempt);
+    final created = await repo.create(
+      name: name,
+      startDate: startDate,
+      targetLength: targetLength,
+      attempt: attempt,
+    );
     await load();
     return created;
   }
 
-  Future<void> toggleDay(int streakId, int dayIndex) async {
-    await repo.toggleDay(streakId, dayIndex);
+  Future<void> toggleDay(int streakId, String dayKey) async {
+    await repo.toggleDay(streakId, dayKey);
     await load();
   }
 
