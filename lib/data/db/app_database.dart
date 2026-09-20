@@ -9,7 +9,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase();
 
   static const _dbName = 'plan_tomorrow.db';
-  static const _dbVersion = 2;
+  static const _dbVersion = 3;
 
   Database? _db;
 
@@ -55,28 +55,32 @@ class AppDatabase {
     await _createHabitStreakTables(db);
   }
 
-  /// Named, calendar-bound streaks (e.g. "Morning workout, September 2026,
-  /// attempt 2") -- independent of the daily task list. One row per day of
-  /// the chosen month is inserted up front at creation time, so ticking is
-  /// always an update, never an insert.
+  /// Named streaks pinned to a real start date (not a calendar month) --
+  /// independent of the daily task list. A streak has a target length
+  /// (e.g. 30 days) but no fixed end tied to a month boundary: day 1 is
+  /// whatever date the person actually started on, which can be backdated
+  /// if they'd already begun before opening the app. `habit_streak_days`
+  /// is sparse -- a row's mere presence means that date was ticked, so
+  /// ticking is an insert and unticking is a delete. Only dates that are
+  /// not in the future are ever allowed a row; that rule is enforced in
+  /// the repository, not the schema.
   static Future<void> _createHabitStreakTables(Database db) async {
     await db.execute('''
       CREATE TABLE habit_streaks (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        name       TEXT    NOT NULL,
-        month      INTEGER NOT NULL,
-        year       INTEGER NOT NULL,
-        attempt    INTEGER NOT NULL,
-        created_at INTEGER NOT NULL
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        name          TEXT    NOT NULL,
+        start_date    TEXT    NOT NULL,
+        target_length INTEGER NOT NULL,
+        attempt       INTEGER NOT NULL,
+        created_at    INTEGER NOT NULL
       )
     ''');
 
     await db.execute('''
       CREATE TABLE habit_streak_days (
         streak_id  INTEGER NOT NULL,
-        day_index  INTEGER NOT NULL,
-        is_done    INTEGER NOT NULL DEFAULT 0,
-        PRIMARY KEY (streak_id, day_index),
+        day_key    TEXT    NOT NULL,
+        PRIMARY KEY (streak_id, day_key),
         FOREIGN KEY (streak_id) REFERENCES habit_streaks (id) ON DELETE CASCADE
       )
     ''');
@@ -88,6 +92,19 @@ class AppDatabase {
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
+      await _createHabitStreakTables(db);
+      return;
+    }
+    if (oldVersion < 3) {
+      // The v2 shape (month/year + a pre-filled row per day) is being
+      // replaced entirely by the start-date shape above -- there's no
+      // reasonable way to carry v2 data forward, since "day 3 of
+      // September" doesn't map onto "day 3 of a streak that started on
+      // some arbitrary date". This feature hadn't shipped to real users
+      // yet, so a clean cut here is the right call rather than writing
+      // migration code for data nobody has.
+      await db.execute('DROP TABLE IF EXISTS habit_streak_days');
+      await db.execute('DROP TABLE IF EXISTS habit_streaks');
       await _createHabitStreakTables(db);
     }
   }
