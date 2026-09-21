@@ -72,25 +72,19 @@ class HabitStreak {
     return n;
   }
 
-  /// Every done day within the target range, regardless of order.
-  int get totalDone {
-    var n = 0;
-    for (var day = 1; day <= targetLength; day++) {
-      if (doneDates.contains(dayKeyFor(day))) n++;
-    }
-    return n;
-  }
+  /// Every logged done day, regardless of date -- including days before
+  /// [startDate], since those are fully loggable (see the class doc). This
+  /// deliberately does NOT walk day-1..targetLength the way
+  /// [currentStreakFromStart] does: that loop is specifically about the
+  /// unbroken chain from day 1 forward, but a total should count
+  /// everything on record, or a day logged before the official start date
+  /// would silently vanish from it despite being visible right there on
+  /// the calendar.
+  int get totalDone => doneDates.length;
 
-  /// Every missed day within the target range -- shown alongside totalDone
-  /// so a blank day (never addressed) reads differently from one that was
-  /// actively marked missed.
-  int get totalMissed {
-    var n = 0;
-    for (var day = 1; day <= targetLength; day++) {
-      if (missedReasons.containsKey(dayKeyFor(day))) n++;
-    }
-    return n;
-  }
+  /// Every logged missed day, regardless of date -- same reasoning as
+  /// [totalDone].
+  int get totalMissed => missedReasons.length;
 
   /// How many days of the target have actually happened yet (today
   /// inclusive), clamped to the target length.
