@@ -263,6 +263,28 @@ void main() {
       expect(spawned, isNull);
       expect(await repo.getAll(), hasLength(1));
     });
+    test(
+        'a day well before the streak\'s own start date still counts in the totals',
+        () async {
+      // This is the exact scenario from the reported bug: a streak whose
+      // start date is today, with several days from earlier in the month
+      // logged. The calendar already showed them correctly; totalDone and
+      // totalMissed were the ones silently reading 0.
+      final s = await repo.create(
+          name: 'HHX', startDate: DayKey.today(), targetLength: 30, attempt: 1);
+      final farBefore = DayKey.addDays(DayKey.today(), -13);
+
+      await repo.markDone(s.id, farBefore);
+      await repo.markMissed(
+          s.id, DayKey.addDays(DayKey.today(), -12), 'Was travelling');
+
+      final reloaded = await repo.getById(s.id);
+      expect(reloaded!.totalDone, 1);
+      expect(reloaded.totalMissed, 1);
+      // The from-day-1 streak is correctly still 0 -- today itself (day 1)
+      // hasn't been addressed yet, which is a separate, correct fact.
+      expect(reloaded.currentStreakFromStart, 0);
+    });
   });
 
   group('attempt suggestion', () {
