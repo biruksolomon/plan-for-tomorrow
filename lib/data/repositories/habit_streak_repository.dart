@@ -12,8 +12,7 @@ class HabitStreakRepository {
   /// Newest first -- matches how the list screen presents them.
   Future<List<HabitStreak>> getAll() async {
     final db = await _db.database;
-    final streakRows =
-        await db.query('habit_streaks', orderBy: 'created_at DESC');
+    final streakRows = await db.query('habit_streaks', orderBy: 'created_at DESC');
 
     final result = <HabitStreak>[];
     for (final row in streakRows) {
@@ -24,8 +23,7 @@ class HabitStreakRepository {
 
   Future<HabitStreak?> getById(int id) async {
     final db = await _db.database;
-    final rows = await db.query('habit_streaks',
-        where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows = await db.query('habit_streaks', where: 'id = ?', whereArgs: [id], limit: 1);
     if (rows.isEmpty) return null;
     return _hydrate(db, rows.first);
   }
@@ -114,12 +112,7 @@ class HabitStreakRepository {
     final db = await _db.database;
     await db.insert(
       'habit_streak_days',
-      {
-        'streak_id': streakId,
-        'day_key': dayKey,
-        'status': 'done',
-        'reason': null
-      },
+      {'streak_id': streakId, 'day_key': dayKey, 'status': 'done', 'reason': null},
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -127,23 +120,64 @@ class HabitStreakRepository {
   /// Marks a day missed. [reason] is required and cannot be blank -- a
   /// missed day always has to say why, so the record is actually useful
   /// later. Overwrites any prior done status on that date.
-  Future<void> markMissed(int streakId, String dayKey, String reason) async {
+  ///
+  /// If this specific miss breaks the streak's currently-active run --
+  /// i.e. every day from day 1 up to (but not including) this one was
+  /// already done, so this was the very next day in the chain -- a new
+  /// attempt is spawned automatically, starting the day after this one,
+  /// with the attempt number incremented. Returns that new streak so the
+  /// caller can navigate to it; returns null when nothing was spawned,
+  /// which covers both an unbroken streak continuing normally and someone
+  /// backfilling an old day that's already outside the live run (that's a
+  /// historical correction, not a live failure -- it shouldn't spin up a
+  /// new attempt on its own).
+  Future<HabitStreak?> markMissed(int streakId, String dayKey, String reason) async {
     _assertNotFuture(dayKey);
     final cleanReason = reason.trim();
     if (cleanReason.isEmpty) {
       throw ArgumentError('A reason is required to mark a day missed.');
     }
 
+    final before = await getById(streakId);
+    if (before == null) {
+      throw StateError('No streak with id $streakId.');
+    }
+
+    final currentRun = before.currentStreakFromStart;
+    final isFrontier = dayKey == before.dayKeyFor(currentRun + 1);
+    // A streak that already hit its target shouldn't auto-spawn a new
+    // attempt off a day logged after the fact -- that's success, not
+    // failure, however the day gets marked later.
+    final alreadyComplete = currentRun >= before.targetLength;
+
     final db = await _db.database;
     await db.insert(
       'habit_streak_days',
-      {
-        'streak_id': streakId,
-        'day_key': dayKey,
-        'status': 'missed',
-        'reason': cleanReason
-      },
+      {'streak_id': streakId, 'day_key': dayKey, 'status': 'missed', 'reason': cleanReason},
       conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+
+    if (!isFrontier || alreadyComplete) return null;
+
+    final nextStart = DayKey.addDays(dayKey, 1);
+    final createdAt = DateTime.now().millisecondsSinceEpoch;
+    final newId = await db.insert('habit_streaks', {
+      'name': before.name,
+      'start_date': nextStart,
+      'target_length': before.targetLength,
+      'attempt': before.attempt + 1,
+      'created_at': createdAt,
+    });
+
+    return HabitStreak(
+      id: newId,
+      name: before.name,
+      startDate: nextStart,
+      targetLength: before.targetLength,
+      attempt: before.attempt + 1,
+      createdAt: createdAt,
+      doneDates: const {},
+      missedReasons: const {},
     );
   }
 
@@ -164,8 +198,7 @@ class HabitStreakRepository {
     // foreign key -- cascade behaviour varies across sqflite platform
     // backends, so this stays correct even where it's not enforced.
     await db.transaction((txn) async {
-      await txn.delete('habit_streak_days',
-          where: 'streak_id = ?', whereArgs: [streakId]);
+      await txn.delete('habit_streak_days', where: 'streak_id = ?', whereArgs: [streakId]);
       await txn.delete('habit_streaks', where: 'id = ?', whereArgs: [streakId]);
     });
   }
