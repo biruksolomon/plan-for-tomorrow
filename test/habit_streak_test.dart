@@ -209,6 +209,62 @@ void main() {
     });
   });
 
+  group('auto-advance to a new attempt on break', () {
+    test('marking the live frontier day missed spawns attempt N+1', () async {
+      final start = DayKey.addDays(DayKey.today(), -2);
+      final s = await repo.create(
+          name: 'Reading', startDate: start, targetLength: 30, attempt: 1);
+
+      await repo.markDone(s.id, DayKey.addDays(start, 0)); // day 1
+      await repo.markDone(s.id, DayKey.addDays(start, 1)); // day 2
+      // Day 3 (today) is the very next day in the chain -- marking it
+      // missed breaks the live run.
+      final spawned = await repo.markMissed(s.id, DayKey.today(), 'Forgot');
+
+      expect(spawned, isNotNull);
+      expect(spawned!.attempt, 2);
+      expect(spawned.startDate, DayKey.tomorrow());
+      expect(spawned.name, 'Reading');
+
+      final all = await repo.getAll();
+      expect(all.length, 2); // original attempt is kept, not replaced
+    });
+
+    test(
+        'backfilling an old day that is not the frontier does not spawn anything',
+        () async {
+      final start = DayKey.addDays(DayKey.today(), -10);
+      final s = await repo.create(
+          name: 'Reading', startDate: start, targetLength: 30, attempt: 1);
+
+      // The chain already broke on day 1 (nothing was ever ticked), so
+      // day 1's own start date is the frontier, not this later day.
+      final laterDay = DayKey.addDays(start, 5);
+      final spawned =
+          await repo.markMissed(s.id, laterDay, 'Backfilling history');
+
+      expect(spawned, isNull);
+      expect(await repo.getAll(), hasLength(1));
+    });
+
+    test('a streak that already hit its target does not auto-spawn', () async {
+      final start = DayKey.addDays(DayKey.today(), -1);
+      final s = await repo.create(
+          name: 'Short', startDate: start, targetLength: 2, attempt: 1);
+
+      await repo.markDone(s.id, DayKey.addDays(start, 0)); // day 1
+      await repo.markDone(
+          s.id, DayKey.addDays(start, 1)); // day 2 (today) -- target hit
+
+      // Nothing left in range to mark missed at the frontier since the
+      // target's already complete; confirm no spawn if a day is revisited.
+      final spawned =
+          await repo.markMissed(s.id, DayKey.today(), 'Changed my mind');
+      expect(spawned, isNull);
+      expect(await repo.getAll(), hasLength(1));
+    });
+  });
+
   group('attempt suggestion', () {
     test('suggests one past the highest existing attempt, case-insensitive',
         () async {
