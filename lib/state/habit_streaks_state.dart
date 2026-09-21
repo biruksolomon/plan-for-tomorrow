@@ -48,9 +48,13 @@ class HabitStreaksState extends ChangeNotifier {
     await load();
   }
 
-  Future<void> markMissed(int streakId, String dayKey, String reason) async {
-    await repo.markMissed(streakId, dayKey, reason);
+  /// Returns the newly-spawned "attempt N+1" streak if this miss broke the
+  /// currently-active run, or null if nothing was spawned.
+  Future<HabitStreak?> markMissed(
+      int streakId, String dayKey, String reason) async {
+    final spawned = await repo.markMissed(streakId, dayKey, reason);
     await load();
+    return spawned;
   }
 
   Future<void> clearDay(int streakId, String dayKey) async {
