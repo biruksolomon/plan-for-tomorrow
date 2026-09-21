@@ -360,7 +360,31 @@ class _StreakDetailScreenState extends State<StreakDetailScreen> {
     }
     final reason = await _askReason(context);
     if (reason == null) return; // cancelled -- day stays exactly as it was
-    await streaksState.markMissed(s.id, dayKey, reason);
+
+    final spawned = await streaksState.markMissed(s.id, dayKey, reason);
+    if (spawned == null || !mounted) return;
+
+    // Don't yank the person off the screen they were just working in --
+    // tell them a new attempt started and let them choose to go look at
+    // it, the same way creating a streak from scratch takes them there.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: AppColors.ink,
+        content: Text(
+          'Streak broke -- Attempt ${spawned.attempt} started.',
+          style: AppTheme.body(13.5, color: AppColors.paper),
+        ),
+        action: SnackBarAction(
+          label: 'VIEW',
+          textColor: AppColors.gold,
+          onPressed: () => Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+                builder: (_) => StreakDetailScreen(streakId: spawned.id)),
+          ),
+        ),
+        duration: const Duration(seconds: 6),
+      ),
+    );
   }
 
   Future<String?> _askReason(BuildContext context) async {
