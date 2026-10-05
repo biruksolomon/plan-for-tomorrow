@@ -58,18 +58,24 @@ class HabitStreak {
   /// locked. A blank day within range is simply undecided so far.
   bool isBlankOn(String dayKey) => !isDoneOn(dayKey) && !isMissedOn(dayKey);
 
-  /// Consecutive **done** days counting from day 1 -- "don't break the
-  /// chain". A missed day breaks it exactly like a blank one does; marking
-  /// the reason doesn't rescue the streak, it just records why it broke.
+  /// Consecutive **done** days leading up to today (or yesterday if today is unlogged/blank).
+  /// A missed day breaks the streak.
   int get currentStreakFromStart {
-    var n = 0;
-    for (var day = 1; day <= targetLength; day++) {
-      final key = dayKeyFor(day);
-      if (isFuture(key)) break;
-      if (!doneDates.contains(key)) break;
-      n++;
+    final today = DayKey.today();
+    var cursor = today;
+
+    // If today is not done yet, start counting backwards from yesterday
+    if (!isDoneOn(today)) {
+      if (isMissedOn(today)) return 0;
+      cursor = DayKey.addDays(today, -1);
     }
-    return n;
+
+    var count = 0;
+    while (isDoneOn(cursor)) {
+      count++;
+      cursor = DayKey.addDays(cursor, -1);
+    }
+    return count;
   }
 
   /// Every logged done day, regardless of date -- including days before

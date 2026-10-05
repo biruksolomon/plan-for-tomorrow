@@ -20,6 +20,13 @@ class Stats {
   final int currentStreak;
   final int bestStreak;
 
+  /// The most recent day, before the current streak, that had a plan but
+  /// wasn't finished — null if there's no such day (fresh start, no history).
+  final String? streakBreakDay;
+
+  /// How many tasks were left undone on [streakBreakDay].
+  final int? streakBreakMissed;
+
   /// Tasks done / tasks planned, across every day that had a plan.
   final double? overallRate;
 
@@ -41,6 +48,8 @@ class Stats {
   const Stats({
     required this.currentStreak,
     required this.bestStreak,
+    this.streakBreakDay,
+    this.streakBreakMissed,
     required this.overallRate,
     required this.recentRate,
     required this.daysPlanned,
@@ -65,6 +74,18 @@ class Stats {
       );
 
   bool get hasData => daysPlanned > 0;
+
+  /// Streak lengths worth calling out. Shared by the Today banner and
+  /// Analytics so the two screens agree on what counts as a milestone.
+  static const milestones = {7, 14, 21, 30, 60, 90, 100, 180, 365};
+
+  bool get isAtMilestone =>
+      currentStreak > 0 && milestones.contains(currentStreak);
+
+  /// True only when there's something concrete to say: the streak is
+  /// currently at zero, and there's a specific day that broke it — as
+  /// opposed to simply never having started one.
+  bool get hasRecentBreak => currentStreak == 0 && streakBreakDay != null;
 
   /// Best and worst weekday by completion rate, or null when there isn't
   /// enough spread to say anything meaningful.

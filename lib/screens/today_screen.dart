@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/day_key.dart';
 import '../core/theme.dart';
+import '../data/models/stats.dart';
 import '../state/app_state.dart';
 import '../widgets/common.dart';
 import 'plan_tomorrow_screen.dart';
@@ -34,7 +35,8 @@ class TodayScreen extends StatelessWidget {
                 )
               : null,
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
+        _StreakBanner(stats: state.stats),
 
         if (!plan.hasPlan)
           EmptyNote(
@@ -74,6 +76,85 @@ class TodayScreen extends StatelessWidget {
           'The list was decided last night. Today is only for doing it.',
         ),
       ],
+    );
+  }
+}
+
+class _StreakBanner extends StatelessWidget {
+  final Stats stats;
+
+  const _StreakBanner({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    if (stats.currentStreak > 0) {
+      return Padding(padding: const EdgeInsets.only(bottom: 20), child: _activeBanner());
+    }
+    if (stats.hasRecentBreak) {
+      return Padding(padding: const EdgeInsets.only(bottom: 20), child: _breakNotice());
+    }
+    // No streak, no history to reference — nothing worth saying yet.
+    return const SizedBox.shrink();
+  }
+
+  Widget _activeBanner() {
+    final n = stats.currentStreak;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.accent,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.local_fire_department, color: AppColors.accentTint, size: 26),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$n-day streak',
+                  style: AppTheme.body(15.5, color: AppColors.accentTint, weight: FontWeight.w700),
+                ),
+                if (stats.isAtMilestone) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Longest run yet at this mark. Keep it going.',
+                    style: AppTheme.body(12, color: AppColors.accentTint),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _breakNotice() {
+    final day = DayKey.pretty(stats.streakBreakDay!);
+    final missed = stats.streakBreakMissed ?? 0;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.paper2,
+        border: Border.all(color: AppColors.muted, width: 1.5),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.local_fire_department_outlined, color: AppColors.muted, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Streak ended — $missed task${missed == 1 ? '' : 's'} missed on $day. '
+              'Today can start a new one.',
+              style: AppTheme.body(13, color: AppColors.muted),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

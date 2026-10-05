@@ -150,7 +150,7 @@ class _StreakDetailScreenState extends State<StreakDetailScreen> {
           const SizedBox(height: 20),
           Text(
             'Pick a pen above, then tap any day up to today. Marking a day '
-            'missed asks why -- tap it again with Missed selected to clear it.',
+            'missed asks why -- once saved, missed days are locked and cannot be updated.',
             textAlign: TextAlign.center,
             style: AppTheme.body(12, color: AppColors.muted),
           ),
@@ -341,10 +341,15 @@ class _StreakDetailScreenState extends State<StreakDetailScreen> {
       HabitStreak s, String dayKey, bool wasDone, bool wasMissed) async {
     final streaksState = context.read<HabitStreaksState>();
 
+    // A missed day is locked once saved -- show read-only reason dialog.
+    if (wasMissed) {
+      _showMissedReasonDialog(context, dayKey, s.missedReasonOn(dayKey));
+      return;
+    }
+
     if (_pen == _Pen.tick) {
       // A direct "set to done"; tapping an already-done day clears it back
-      // to blank. Switching pens and tapping a missed day overwrites it
-      // (its reason is discarded, same as picking a new answer).
+      // to blank.
       if (wasDone) {
         await streaksState.clearDay(s.id, dayKey);
       } else {
@@ -353,11 +358,7 @@ class _StreakDetailScreenState extends State<StreakDetailScreen> {
       return;
     }
 
-    // Missed pen.
-    if (wasMissed) {
-      await streaksState.clearDay(s.id, dayKey);
-      return;
-    }
+    // Missed pen on a non-missed day.
     final reason = await _askReason(context);
     if (reason == null) return; // cancelled -- day stays exactly as it was
 
@@ -383,6 +384,53 @@ class _StreakDetailScreenState extends State<StreakDetailScreen> {
           ),
         ),
         duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+
+  void _showMissedReasonDialog(
+      BuildContext context, String dayKey, String? reason) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.paper,
+        title: Text('Missed on ${DayKey.pretty(dayKey)}',
+            style: AppTheme.display(20)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Reason given:',
+              style: AppTheme.body(12,
+                  color: AppColors.muted, weight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              (reason != null && reason.trim().isNotEmpty)
+                  ? reason.trim()
+                  : 'No reason recorded',
+              style: AppTheme.body(14.5),
+            ),
+            const SizedBox(height: 16),
+            Container(height: 1, color: AppColors.muted.withValues(alpha: 0.3)),
+            const SizedBox(height: 10),
+            Text(
+              'Missed days are locked and cannot be changed or updated.',
+              style: AppTheme.body(11.5, color: AppColors.muted),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(
+              'OK',
+              style: AppTheme.body(14,
+                  color: AppColors.accent, weight: FontWeight.w700),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -77,6 +77,36 @@ void main() {
       final stats = await repo.getStats();
       expect(stats.bestStreak, 1);
     });
+
+    test('a missed day is reported as the streak break', () async {
+      await seed(DayKey.addDays(DayKey.today(), -3), 2, 2);
+      await seed(DayKey.addDays(DayKey.today(), -1), 2, 0); // missed both, breaks the streak
+      await seed(DayKey.today(), 1, 0); // today not finished yet either
+
+      final stats = await repo.getStats();
+      expect(stats.currentStreak, 0);
+      expect(stats.streakBreakDay, DayKey.addDays(DayKey.today(), -1));
+      expect(stats.streakBreakMissed, 2);
+      expect(stats.hasRecentBreak, isTrue);
+    });
+
+    test('no break is reported when there is simply no history', () async {
+      await seed(DayKey.today(), 3, 0); // nothing done yet today, no prior days
+
+      final stats = await repo.getStats();
+      expect(stats.currentStreak, 0);
+      expect(stats.streakBreakDay, isNull);
+      expect(stats.hasRecentBreak, isFalse);
+    });
+
+    test('milestone flag fires only at named streak lengths', () async {
+      for (var i = 1; i <= 7; i++) {
+        await seed(DayKey.addDays(DayKey.today(), -i), 1, 1);
+      }
+      final stats = await repo.getStats();
+      expect(stats.currentStreak, 7);
+      expect(stats.isAtMilestone, isTrue);
+    });
   });
 
   group('stats exclude the future', () {

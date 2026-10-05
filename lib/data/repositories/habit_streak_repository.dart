@@ -109,6 +109,10 @@ class HabitStreakRepository {
   /// toggle. Call [clearDay] to blank a day that's already done.
   Future<void> markDone(int streakId, String dayKey) async {
     _assertNotFuture(dayKey);
+    final streak = await getById(streakId);
+    if (streak != null && streak.isMissedOn(dayKey)) {
+      throw StateError('Cannot modify a missed day: missed days are locked.');
+    }
     final db = await _db.database;
     await db.insert(
       'habit_streak_days',
@@ -141,6 +145,10 @@ class HabitStreakRepository {
     final before = await getById(streakId);
     if (before == null) {
       throw StateError('No streak with id $streakId.');
+    }
+
+    if (before.isMissedOn(dayKey)) {
+      throw StateError('Cannot modify a missed day: missed days are locked.');
     }
 
     final currentRun = before.currentStreakFromStart;
@@ -184,6 +192,10 @@ class HabitStreakRepository {
   /// Clears a day back to blank -- removing a done or missed status,
   /// reason included. No reason needed to clear; only to set missed.
   Future<void> clearDay(int streakId, String dayKey) async {
+    final streak = await getById(streakId);
+    if (streak != null && streak.isMissedOn(dayKey)) {
+      throw StateError('Cannot clear a missed day: missed days are locked.');
+    }
     final db = await _db.database;
     await db.delete(
       'habit_streak_days',

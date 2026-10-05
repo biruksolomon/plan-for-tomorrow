@@ -187,10 +187,13 @@ class TaskRepository {
     }
 
     final byDay = {for (final p in past) p.dayKey: p};
+    final streakResult = _currentStreak(byDay, today);
 
     return Stats(
-      currentStreak: _currentStreak(byDay, today),
+      currentStreak: streakResult.streak,
       bestStreak: _bestStreak(byDay, past),
+      streakBreakDay: streakResult.breakDay,
+      streakBreakMissed: streakResult.missed,
       overallRate: tasksPlanned == 0 ? null : tasksDone / tasksPlanned,
       recentRate: _recentRate(byDay, today),
       daysPlanned: past.length,
@@ -205,7 +208,13 @@ class TaskRepository {
   /// Counts back from today. Today not yet finished doesn't break the streak:
   /// if today isn't perfect we start counting from yesterday instead, so the
   /// number doesn't drop to zero every morning.
-  int _currentStreak(Map<String, DailyPoint> byDay, String today) {
+  ///
+  /// Also reports the day right after the streak stopped — the day that
+  /// actually broke it — so the UI can name it instead of just showing 0.
+  ({int streak, String? breakDay, int? missed}) _currentStreak(
+    Map<String, DailyPoint> byDay,
+    String today,
+  ) {
     var cursor = today;
     if (!(byDay[today]?.isPerfect ?? false)) {
       cursor = DayKey.addDays(today, -1);
@@ -218,7 +227,19 @@ class TaskRepository {
       streak++;
       cursor = DayKey.addDays(cursor, -1);
     }
-    return streak;
+
+    // `cursor` now sits on the day the run stopped. It's only a genuine
+    // "break" if that day actually had a plan and fell short — a day with
+    // no plan at all just means history doesn't go back further.
+    final breakPoint = byDay[cursor];
+    if (breakPoint != null && breakPoint.hasPlan && !breakPoint.isPerfect) {
+      return (
+        streak: streak,
+        breakDay: breakPoint.dayKey,
+        missed: breakPoint.total - breakPoint.done,
+      );
+    }
+    return (streak: streak, breakDay: null, missed: null);
   }
 
   int _bestStreak(Map<String, DailyPoint> byDay, List<DailyPoint> past) {
