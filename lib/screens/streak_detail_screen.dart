@@ -7,6 +7,7 @@ import '../core/theme.dart';
 import '../data/models/habit_streak.dart';
 import '../state/habit_streaks_state.dart';
 import '../widgets/common.dart';
+import 'urge_surfer_screen.dart';
 
 enum _Pen { tick, missed }
 
@@ -111,6 +112,30 @@ class _StreakDetailScreenState extends State<StreakDetailScreen> {
               _statBox('${s.totalMissed}', 'DAYS MISSED\nTOTAL'),
             ],
           ),
+          if (s.category == 'recovery') ...[
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => UrgeSurferScreen(
+                    streakDay: s.currentStreakFromStart + 1,
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.shield, color: AppColors.accentTint),
+              label: Text(
+                'URGE SURFER (SOS)',
+                style: AppTheme.body(14,
+                    color: AppColors.accentTint, weight: FontWeight.w700),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
           const SizedBox(height: 22),
           _penSelector(),
           const SizedBox(height: 20),

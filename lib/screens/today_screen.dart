@@ -54,6 +54,7 @@ class TodayScreen extends StatelessWidget {
               index: i + 1,
               title: plan.tasks[i].title,
               isDone: plan.tasks[i].isDone,
+              scheduledTime: plan.tasks[i].scheduledTime,
               onToggle: () => context.read<AppState>().toggle(plan.tasks[i].id!),
             ),
           const SizedBox(height: 10),

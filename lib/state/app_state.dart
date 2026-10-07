@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../core/day_key.dart';
+import '../core/services/notification_service.dart';
 import '../data/models/day_plan.dart';
 import '../data/models/stats.dart';
 import '../data/repositories/task_repository.dart';
@@ -55,14 +56,16 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     _today = await repo.getToday();
     notifyListeners();
 
-    // Stats are a heavier query; refresh them after the tick has already
-    // been painted so the checkbox never feels laggy.
+    NotificationService.instance.updateTaskSequenceQueue(_today.tasks);
+
     _stats = await repo.getStats();
     notifyListeners();
   }
 
-  Future<void> saveTomorrow(List<String> titles) async {
-    await repo.savePlan(DayKey.tomorrow(), titles);
+  Future<void> saveTomorrow(
+    List<({String title, String? scheduledTime})> tasks,
+  ) async {
+    await repo.savePlan(DayKey.tomorrow(), tasks);
     _tomorrow = await repo.getTomorrow();
     _stats = await repo.getStats();
     notifyListeners();

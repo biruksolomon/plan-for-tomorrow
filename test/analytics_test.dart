@@ -17,7 +17,7 @@ void main() {
 
   setUp(() async {
     db = await databaseFactory.openDatabase(inMemoryDatabasePath);
-    await AppDatabase.createSchema(db, 1);
+    await AppDatabase.createSchema(db, 5);
     repo = TaskRepository(db: AppDatabase()..useExisting(db));
   });
 
@@ -123,18 +123,23 @@ void main() {
   group('planning rules', () {
     test('planning is rejected for today and the past', () async {
       expect(
-        () => repo.savePlan(DayKey.today(), ['a']),
+        () => repo.savePlan(DayKey.today(), [(title: 'a', scheduledTime: null)]),
         throwsA(isA<StateError>()),
       );
       expect(
-        () => repo.savePlan(DayKey.yesterday(), ['a']),
+        () => repo.savePlan(DayKey.yesterday(), [(title: 'a', scheduledTime: null)]),
         throwsA(isA<StateError>()),
       );
     });
 
     test('saving a plan replaces the previous one', () async {
-      await repo.savePlan(DayKey.tomorrow(), ['one', 'two']);
-      await repo.savePlan(DayKey.tomorrow(), ['three']);
+      await repo.savePlan(DayKey.tomorrow(), [
+        (title: 'one', scheduledTime: null),
+        (title: 'two', scheduledTime: null),
+      ]);
+      await repo.savePlan(DayKey.tomorrow(), [
+        (title: 'three', scheduledTime: null),
+      ]);
 
       final plan = await repo.getTomorrow();
       expect(plan.tasks.length, 1);
@@ -143,10 +148,10 @@ void main() {
 
     test('blank entries are dropped and the cap is enforced', () async {
       await repo.savePlan(DayKey.tomorrow(), [
-        'real',
-        '   ',
-        '',
-        ...List.generate(20, (i) => 'extra $i'),
+        (title: 'real', scheduledTime: null),
+        (title: '   ', scheduledTime: null),
+        (title: '', scheduledTime: null),
+        ...List.generate(20, (i) => (title: 'extra $i', scheduledTime: null)),
       ]);
 
       final plan = await repo.getTomorrow();
@@ -155,7 +160,7 @@ void main() {
     });
 
     test('ticking is rejected on days that are not today', () async {
-      await repo.savePlan(DayKey.tomorrow(), ['later']);
+      await repo.savePlan(DayKey.tomorrow(), [(title: 'later', scheduledTime: null)]);
       final plan = await repo.getTomorrow();
 
       expect(

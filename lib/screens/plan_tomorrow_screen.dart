@@ -21,8 +21,9 @@ class _Row {
   final int id;
   final TextEditingController controller;
   final FocusNode focusNode;
+  TimeOfDay? scheduledTime;
 
-  _Row(this.id, {String text = ''})
+  _Row(this.id, {String text = '', this.scheduledTime})
       : controller = TextEditingController(text: text),
         focusNode = FocusNode();
 
@@ -43,9 +44,6 @@ class _PlanTomorrowScreenState extends State<PlanTomorrowScreen> {
   void initState() {
     super.initState();
 
-    // Pre-fill with whatever is already planned. If nothing is planned yet,
-    // start with 3 blank rows rather than 1 — enough to write without
-    // reaching for the add button immediately, but nowhere near the cap.
     final existing = context.read<AppState>().tomorrow.tasks;
     if (existing.isEmpty) {
       for (var i = 0; i < 3; i++) {
@@ -53,7 +51,17 @@ class _PlanTomorrowScreenState extends State<PlanTomorrowScreen> {
       }
     } else {
       for (final task in existing) {
-        _rows.add(_Row(_nextId++, text: task.title));
+        TimeOfDay? t;
+        if (task.scheduledTime != null) {
+          final parts = task.scheduledTime!.split(':');
+          if (parts.length == 2) {
+            t = TimeOfDay(
+              hour: int.tryParse(parts[0]) ?? 9,
+              minute: int.tryParse(parts[1]) ?? 0,
+            );
+          }
+        }
+        _rows.add(_Row(_nextId++, text: task.title, scheduledTime: t));
       }
     }
 
@@ -103,9 +111,17 @@ class _PlanTomorrowScreenState extends State<PlanTomorrowScreen> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      await context
-          .read<AppState>()
-          .saveTomorrow(_rows.map((r) => r.controller.text).toList());
+      final tasks = _rows.map((r) {
+        String? timeStr;
+        if (r.scheduledTime != null) {
+          final hh = r.scheduledTime!.hour.toString().padLeft(2, '0');
+          final mm = r.scheduledTime!.minute.toString().padLeft(2, '0');
+          timeStr = '$hh:$mm';
+        }
+        return (title: r.controller.text, scheduledTime: timeStr);
+      }).toList();
+
+      await context.read<AppState>().saveTomorrow(tasks);
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -151,8 +167,7 @@ class _PlanTomorrowScreenState extends State<PlanTomorrowScreen> {
           ),
           const SizedBox(height: 10),
           Text(
-            'Write what tomorrow is for. Once the day starts this list is '
-            'fixed — you will only be able to tick it off.',
+            'Write what tomorrow is for. Tap the clock to set an optional alarm time for any task.',
             style: AppTheme.body(14, color: AppColors.muted),
           ),
           const SizedBox(height: 22),
@@ -183,9 +198,11 @@ class _PlanTomorrowScreenState extends State<PlanTomorrowScreen> {
   Widget _field(int i) {
     final row = _rows[i];
     final hasText = row.controller.text.trim().isNotEmpty;
-    // Only offer removal once there's more than one row, so the user is
-    // never left staring at zero fields with no way back in.
     final canRemove = _rows.length > 1;
+
+    final timeLabel = row.scheduledTime != null
+        ? '${row.scheduledTime!.hour.toString().padLeft(2, '0')}:${row.scheduledTime!.minute.toString().padLeft(2, '0')}'
+        : null;
 
     return Container(
       key: ValueKey(row.id),
@@ -231,6 +248,32 @@ class _PlanTomorrowScreenState extends State<PlanTomorrowScreen> {
               ),
             ),
           ),
+          IconButton(
+            icon: Icon(
+              Icons.access_time,
+              size: 18,
+              color: row.scheduledTime != null ? AppColors.accent : AppColors.muted,
+            ),
+            tooltip: timeLabel ?? 'Set alarm time',
+            onPressed: () async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: row.scheduledTime ?? const TimeOfDay(hour: 9, minute: 0),
+              );
+              if (picked != null) {
+                setState(() => row.scheduledTime = picked);
+              }
+            },
+          ),
+          if (timeLabel != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Text(
+                timeLabel,
+                style: AppTheme.body(11,
+                    color: AppColors.accent, weight: FontWeight.w700),
+              ),
+            ),
           SizedBox(
             width: 36,
             child: canRemove

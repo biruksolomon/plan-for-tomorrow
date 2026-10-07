@@ -32,12 +32,18 @@ class HabitStreaksState extends ChangeNotifier {
     required String startDate,
     required int targetLength,
     required int attempt,
+    String category = 'positive',
+    String? reminderTime,
+    String? highRiskStart,
   }) async {
     final created = await repo.create(
       name: name,
       startDate: startDate,
       targetLength: targetLength,
       attempt: attempt,
+      category: category,
+      reminderTime: reminderTime,
+      highRiskStart: highRiskStart,
     );
     await load();
     return created;

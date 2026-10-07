@@ -21,6 +21,9 @@ class _NewStreakScreenState extends State<NewStreakScreen> {
 
   late String
       _startDate; // defaults to today; can only be backdated, never future
+  String _category = 'positive'; // 'positive' or 'recovery'
+  TimeOfDay? _reminderTime;
+  TimeOfDay? _highRiskStart;
   bool _saving = false;
 
   @override
@@ -47,11 +50,6 @@ class _NewStreakScreenState extends State<NewStreakScreen> {
         await context.read<HabitStreaksState>().suggestNextAttempt(name);
     if (!mounted) return;
 
-    // These queries fire on every keystroke and can resolve out of order --
-    // typing fast enough means the request for "R" can come back *after*
-    // the request for "Reading" and silently overwrite the correct number
-    // with a stale one. Only apply a result if the name it was asked about
-    // is still what's actually in the field right now.
     if (_nameController.text.trim() != name) return;
 
     _attemptController.text = '$suggestion';
@@ -62,14 +60,19 @@ class _NewStreakScreenState extends State<NewStreakScreen> {
     final picked = await showDatePicker(
       context: context,
       initialDate: DayKey.parse(_startDate),
-      // The whole point: you can backdate to say you'd already started,
-      // but you can never pick a date that hasn't happened yet.
       firstDate: DateTime(now.year - 1),
       lastDate: DateTime(now.year, now.month, now.day),
       helpText: 'When did you actually start?',
     );
     if (picked == null) return;
     setState(() => _startDate = DayKey.of(picked));
+  }
+
+  String _formatTimeOfDay(TimeOfDay? t) {
+    if (t == null) return 'Not set';
+    final hh = t.hour.toString().padLeft(2, '0');
+    final mm = t.minute.toString().padLeft(2, '0');
+    return '$hh:$mm';
   }
 
   Future<void> _create() async {
@@ -85,6 +88,9 @@ class _NewStreakScreenState extends State<NewStreakScreen> {
           startDate: _startDate,
           targetLength: target < 1 ? 1 : target,
           attempt: attempt,
+          category: _category,
+          reminderTime: _reminderTime != null ? _formatTimeOfDay(_reminderTime) : null,
+          highRiskStart: _highRiskStart != null ? _formatTimeOfDay(_highRiskStart) : null,
         );
 
     if (!mounted) return;
@@ -115,11 +121,90 @@ class _NewStreakScreenState extends State<NewStreakScreen> {
               height: 3,
               color: AppColors.ink,
               margin: const EdgeInsets.only(top: 14, bottom: 26)),
+          _label('Category'),
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => _category = 'positive'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: _category == 'positive' ? AppColors.accent : AppColors.paper2,
+                      border: Border.all(color: AppColors.ink, width: 1.5),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'Positive Habit',
+                        style: AppTheme.body(13,
+                            weight: FontWeight.w700,
+                            color: _category == 'positive' ? AppColors.accentTint : AppColors.ink),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => _category = 'recovery'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: _category == 'recovery' ? AppColors.accent : AppColors.paper2,
+                      border: Border.all(color: AppColors.ink, width: 1.5),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'Quit / Recovery',
+                        style: AppTheme.body(13,
+                            weight: FontWeight.w700,
+                            color: _category == 'recovery' ? AppColors.accentTint : AppColors.ink),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
           _label('Streak name'),
           _textField(
             controller: _nameController,
-            hint: 'e.g. Morning workout',
+            hint: _category == 'recovery' ? 'e.g. No PMO / Clean Streak' : 'e.g. Morning workout',
             onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 20),
+          _label('Daily Reminder Time (Optional)'),
+          GestureDetector(
+            onTap: () async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: _reminderTime ?? const TimeOfDay(hour: 20, minute: 0),
+              );
+              if (picked != null) setState(() => _reminderTime = picked);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              decoration: BoxDecoration(
+                color: AppColors.paper2,
+                border: Border.all(color: AppColors.ink, width: 1.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _reminderTime == null ? 'No daily alarm set' : 'Alarm set at ${_formatTimeOfDay(_reminderTime)}',
+                      style: AppTheme.body(14, weight: FontWeight.w600),
+                    ),
+                  ),
+                  const Icon(Icons.access_time, size: 17, color: AppColors.muted),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 20),
           _label('Start date'),

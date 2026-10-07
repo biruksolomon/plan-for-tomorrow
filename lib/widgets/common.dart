@@ -78,6 +78,7 @@ class TickRow extends StatelessWidget {
   final int index;
   final String title;
   final bool isDone;
+  final String? scheduledTime;
   final VoidCallback? onToggle;
 
   const TickRow({
@@ -85,6 +86,7 @@ class TickRow extends StatelessWidget {
     required this.index,
     required this.title,
     required this.isDone,
+    this.scheduledTime,
     this.onToggle,
   });
 
@@ -122,14 +124,38 @@ class TickRow extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: Text(
-                  title,
-                  style: AppTheme.body(
-                    15,
-                    color: textColor,
-                    weight: FontWeight.w600,
-                    decoration: filled ? TextDecoration.lineThrough : null,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: AppTheme.body(
+                        15,
+                        color: textColor,
+                        weight: FontWeight.w600,
+                        decoration: filled ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                    if (scheduledTime != null) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.access_time,
+                            size: 12,
+                            color: filled ? AppColors.accentTint : AppColors.muted,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            scheduledTime!,
+                            style: AppTheme.body(11,
+                                color: filled ? AppColors.accentTint : AppColors.muted,
+                                weight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(width: 12),

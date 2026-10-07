@@ -16,7 +16,7 @@ void main() {
 
   setUp(() async {
     db = await databaseFactory.openDatabase(inMemoryDatabasePath);
-    await AppDatabase.createSchema(db, 1);
+    await AppDatabase.createSchema(db, 5);
     repo = HabitStreakRepository(db: AppDatabase()..useExisting(db));
   });
 
