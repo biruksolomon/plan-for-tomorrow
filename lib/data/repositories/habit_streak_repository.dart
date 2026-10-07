@@ -58,6 +58,9 @@ class HabitStreakRepository {
       createdAt: row['created_at'] as int,
       doneDates: doneDates,
       missedReasons: missedReasons,
+      category: (row['category'] as String?) ?? 'positive',
+      reminderTime: row['reminder_time'] as String?,
+      highRiskStart: row['high_risk_start'] as String?,
     );
   }
 
@@ -69,6 +72,9 @@ class HabitStreakRepository {
     required String startDate,
     required int targetLength,
     required int attempt,
+    String category = 'positive',
+    String? reminderTime,
+    String? highRiskStart,
   }) async {
     if (DayKey.daysBetween(DayKey.today(), startDate) > 0) {
       throw StateError('Cannot start a streak in the future.');
@@ -84,6 +90,9 @@ class HabitStreakRepository {
       'target_length': targetLength,
       'attempt': attempt,
       'created_at': createdAt,
+      'category': category,
+      'reminder_time': reminderTime,
+      'high_risk_start': highRiskStart,
     });
 
     return HabitStreak(
@@ -95,6 +104,9 @@ class HabitStreakRepository {
       createdAt: createdAt,
       doneDates: const {},
       missedReasons: const {},
+      category: category,
+      reminderTime: reminderTime,
+      highRiskStart: highRiskStart,
     );
   }
 
@@ -175,6 +187,9 @@ class HabitStreakRepository {
       'target_length': before.targetLength,
       'attempt': before.attempt + 1,
       'created_at': createdAt,
+      'category': before.category,
+      'reminder_time': before.reminderTime,
+      'high_risk_start': before.highRiskStart,
     });
 
     return HabitStreak(
@@ -186,6 +201,9 @@ class HabitStreakRepository {
       createdAt: createdAt,
       doneDates: const {},
       missedReasons: const {},
+      category: before.category,
+      reminderTime: before.reminderTime,
+      highRiskStart: before.highRiskStart,
     );
   }
 

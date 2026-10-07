@@ -79,7 +79,10 @@ class TaskRepository {
   /// Only future days can be planned — this is the rule the whole app is
   /// built around, so it is enforced here at the data layer rather than
   /// trusted to the UI.
-  Future<void> savePlan(String dayKey, List<String> titles) async {
+  Future<void> savePlan(
+    String dayKey,
+    List<({String title, String? scheduledTime})> tasks,
+  ) async {
     final plan = DayPlan.empty(dayKey);
     if (!plan.isEditable) {
       throw StateError(
@@ -87,9 +90,8 @@ class TaskRepository {
       );
     }
 
-    final cleaned = titles
-        .map((t) => t.trim())
-        .where((t) => t.isNotEmpty)
+    final cleaned = tasks
+        .where((t) => t.title.trim().isNotEmpty)
         .take(maxTasksPerDay)
         .toList();
 
@@ -99,9 +101,10 @@ class TaskRepository {
       for (var i = 0; i < cleaned.length; i++) {
         await txn.insert('tasks', {
           'day_key': dayKey,
-          'title': cleaned[i],
+          'title': cleaned[i].title.trim(),
           'is_done': 0,
           'position': i,
+          'scheduled_time': cleaned[i].scheduledTime,
         });
       }
     });

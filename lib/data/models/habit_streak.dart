@@ -30,6 +30,10 @@ class HabitStreak {
   /// here.
   final Map<String, String> missedReasons;
 
+  final String category; // 'positive' or 'recovery'
+  final String? reminderTime; // "HH:mm"
+  final String? highRiskStart; // "HH:mm"
+
   const HabitStreak({
     required this.id,
     required this.name,
@@ -39,6 +43,9 @@ class HabitStreak {
     required this.createdAt,
     required this.doneDates,
     required this.missedReasons,
+    this.category = 'positive',
+    this.reminderTime,
+    this.highRiskStart,
   });
 
   /// The date for day N of this streak (1-indexed).
